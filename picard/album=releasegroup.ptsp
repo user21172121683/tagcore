@@ -1,0 +1,5 @@
+title: album=releasegroup
+script_language_version: '1.1'
+script: |
+  $set(album,%_releasegroup%)
+id: 13421033-1b64-42c9-ad63-c903e9470d03

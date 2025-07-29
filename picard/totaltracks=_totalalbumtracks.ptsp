@@ -1,0 +1,5 @@
+title: totaltracks=_totalalbumtracks (imported)
+script_language_version: '1.1'
+script: |
+  $set(totaltracks,%_totalalbumtracks%)
+id: 1d1dba35-3fa7-4e5f-9330-adab1bf47682
