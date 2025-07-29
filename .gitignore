@@ -1,0 +1,8 @@
+.*
+!/.gitignore
+*test*
+__*__
+logs/
+*.log
+*.pyc
+*.html
