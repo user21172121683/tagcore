@@ -99,8 +99,10 @@ class App:
             return
 
         try:
-            print(f"\nRunning script: {name}")
-            self.logger.debug(f"Config for {name}:\n{pformat(self.config[name], indent=2, width=80, sort_dicts=False)}")
+            answer = input(f"{pformat(self.config[name], indent=2, width=80, sort_dicts=False)}\nRun {name} with the above config? (Y/n): ").strip().lower()
+            if answer not in ("", "y", "yes"):
+                print("Aborting script run.")
+                return
             cls = self.scripts[name]["class"]
             instance = cls(**self.config[name])
             instance.run()
