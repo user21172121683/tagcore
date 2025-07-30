@@ -118,10 +118,6 @@ class Rymporter:
             file (Path): Path to the FLAC file.
         """
         matched = False
-
-        def _normalize_str(s):
-            return s.strip().lower() if s else ""
-
         try:
             audio = FLAC(file)
             audio_artist = audio.get(self.field_definitions["artist_name"], [""])[0]
@@ -156,8 +152,7 @@ class Rymporter:
                     break
 
                 # Match by normalized artist and album title
-                if (_normalize_str(rym_artist) == _normalize_str(audio_artist)
-                        and _normalize_str(rym_album_title) == _normalize_str(audio_album_title)):
+                if rym_artist == audio_artist and rym_album_title == audio_album_title:
                     self.logger.debug(f"Matched via artist-title: {rym_album_str}")
                     matched = True
                     self._update_album(rym_album, audio)
@@ -165,9 +160,7 @@ class Rymporter:
 
                 # Check manual matches
                 for input_id, (input_artist, input_title) in self._manual_matches.items():
-                    if (rym_album_id == input_id
-                            and _normalize_str(input_artist) == _normalize_str(audio_artist)
-                            and _normalize_str(input_title) == _normalize_str(audio_album_title)):
+                    if rym_album_id == input_id and input_artist == audio_artist and input_title == audio_album_title:
                         self.logger.debug(f"Matched via manual input: {rym_album_str}")
                         matched = True
                         self._update_album(rym_album, audio)
