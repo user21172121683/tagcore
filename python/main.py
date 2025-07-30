@@ -123,18 +123,12 @@ def main():
             if description:
                 display_name += f": {description}"
             print(f"  [{i}] {display_name}")
-        print("  [all] Run all scripts")
 
-        script_input = input("\nEnter script number or class name (or 'all' to run all, Enter to quit): ").strip()
+        script_input = input("\nEnter script number or class name (or press Enter to quit): ").strip()
 
         if not script_input:
             print("Goodbye!")
             break
-
-        if script_input.lower() == "all":
-            for name in app.scripts:
-                app.run_script(name)
-            continue
 
         # Try interpreting the input as a number
         if script_input.isdigit():
