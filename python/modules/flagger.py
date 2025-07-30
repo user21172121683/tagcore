@@ -24,6 +24,7 @@ class Flagger:
         self.cover_auto_resize = config.get('cover_auto_resize', False)
         self.cover_auto_delete = config.get('cover_auto_delete', False)
         self.cover_auto_reformat = config.get('cover_auto_reformat', False)
+        self.skip_integrity_check = config.get('skip_integrity_check', False)
         self.dry_run = config.get('dry_run', True)
 
         # Set internal state
@@ -77,8 +78,11 @@ class Flagger:
         self.logger.info(f"\n{'-'*100}\nGoing back to main...\n{'-'*100}")
 
     def check_integrity(self, file):
-        self.logger.info("Checking integrity...")
         problems = []
+        if self.skip_integrity_check:
+            self.logger.info("Skipping integrity check.")
+            return problems
+        self.logger.info("Checking integrity...")
         try:
             result = subprocess.run(
                 ["flac", "-t", file],

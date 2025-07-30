@@ -37,6 +37,7 @@ Rymporter:
 Flagger:
   dry_run: false
   master_dir: flac
+  skip_integrity_check: false
   problems_field: PROBLEMS
   cover_target_size: [1000, 1000]
   cover_auto_resize: false
