@@ -1,6 +1,6 @@
 import webbrowser
 from pathlib import Path
-from utils import setup_logger
+from utils import setup_logger, returning_message
 
 class Collector:
     """
@@ -19,4 +19,4 @@ class Collector:
         url = f"https://rateyourmusic.com/collection_p/{self.username}/d.rp,albjh,tn,v,o,g,n9999999"
         self.logger.info(f"Opening collection URL: {url}")
         webbrowser.open(url)
-        self.logger.info(f"\n{'-'*100}\nGoing back to main...\n{'-'*100}")
+        self.logger.info(returning_message())

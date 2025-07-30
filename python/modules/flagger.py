@@ -2,7 +2,7 @@ from PIL import Image
 import io
 import subprocess
 from mutagen.flac import FLAC
-from utils import index_files, setup_logger, processing_message
+from utils import index_files, setup_logger, processing_message, returning_message
 from pathlib import Path
 
 
@@ -75,7 +75,7 @@ class Flagger:
             self.logger.error(f"Failed to process {len(self._files_failed)} files:")
             for failed_file in self._files_failed:
                 self.logger.critical(f"  - {failed_file}")
-        self.logger.info(f"\n{'-'*100}\nGoing back to main...\n{'-'*100}")
+        self.logger.info(returning_message())
 
     def check_integrity(self, file):
         problems = []

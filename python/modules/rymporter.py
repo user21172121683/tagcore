@@ -1,7 +1,7 @@
 from mutagen.flac import FLAC
 from pprint import pformat
 import traceback
-from utils import index_files, setup_logger, processing_message
+from utils import index_files, setup_logger, processing_message, returning_message
 from datetime import datetime
 from pathlib import Path
 from rymparser import Rymparser
@@ -108,7 +108,7 @@ class Rymporter:
             )
         if len(self._albums_to_skip) == 0 and len(self._insufficient_metadata) == 0:
             self.logger.info("No issues encountered.")
-        self.logger.info(f"\n{'-'*100}\nGoing back to main...\n{'-'*100}")
+        self.logger.info(returning_message())
 
     def match_album(self, file: Path):
         """
