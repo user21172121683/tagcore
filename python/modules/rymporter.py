@@ -209,11 +209,11 @@ class Rymporter:
 
         modified = False
         for field_name, new_values in new_metadata.items():
-            # Use lowercase field names consistently
-            current_values = audio.get(field_name.lower(), [])
+            # Use uppercase field names consistently
+            current_values = audio.get(field_name.upper(), [])
             if self._should_update_field(current_values, new_values):
                 self.logger.debug(f"  {field_name.upper()} = {', '.join(map(str, new_values))}")
-                audio[field_name.lower()] = new_values
+                audio[field_name.upper()] = new_values
                 modified = True
                 self._files_modified += 1
             else:
@@ -239,10 +239,10 @@ class Rymporter:
             rym_album (dict): Album data from RYM.
 
         Returns:
-            dict: Mapping of metadata field names (lowercase) to list of values.
+            dict: Mapping of metadata field names (uppercase) to list of values.
         """
         temp_values = {
-            self.field_definitions[tag].lower(): []
+            self.field_definitions[tag].upper(): []
             for tag in self.fields_to_modify
             if self.fields_to_modify.get(tag) and self.field_definitions.get(tag)
         }
@@ -270,7 +270,7 @@ class Rymporter:
                 if self.fields_to_modify.get(key):
                     field_name = self.field_definitions.get(key)
                     if field_name:
-                        temp_values[field_name.lower()].append(val)
+                        temp_values[field_name.upper()].append(val)
 
         return temp_values
 
