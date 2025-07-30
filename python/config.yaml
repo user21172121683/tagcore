@@ -1,2 +1,63 @@
+Rymporter:
+  dry_run: false
+  auto_skip: false
+  master_dir: flac
+  collection_html: d.rp,albjh,tn,v,o,g,n9999999.html
+  field_definitions:
+    album_id: RYM_ALBUMID
+    album_title: ALBUM
+    artist_id: RYM_ALBUMARTISTID
+    artist_name: ALBUMARTIST
+    artist_collab: ALBUMARTISTCOLLAB
+    date: DATE
+    genre_id: RYM_GENREID
+    genre_name: GENRE
+    rating: RYM_RATING
+    ownership: RYM_OWNERSHIP
+    tag: RYM_TAG
+    label_id: RYM_LABELID
+    label_name: LABEL
+    label_catalognr: CATALOGNR
+  fields_to_modify:
+    album_id: true
+    album_title: false
+    artist_id: true
+    artist_name: false
+    artist_collab: false
+    date: false
+    genre_id: true
+    genre_name: true
+    rating: true
+    ownership: false
+    tag: true
+    label_id: false
+    label_name: false
+    label_catalognr: false
+
+Flagger:
+  dry_run: false
+  master_dir: flac
+  problems_field: PROBLEMS
+  cover_target_size: [1000, 1000]
+  cover_auto_resize: false
+  cover_auto_reformat: false
+  cover_auto_delete: false
+  cover_allowed_formats:
+    - jpg
+  tags_to_check:
+    - GENRE
+    - MUSICBRAINZ_ALBUMID
+    - MUSICBRAINZ_ALBUMARTISTID
+    - MUSICBRAINZ_ARTISTID
+    - MUSICBRAINZ_TRACKID
+    - UNSYNCEDLYRICS
+    - RYM_ALBUMID
+    - RYM_ALBUMARTISTID
+    - ALBUMARTIST
+    - ALBUM
+    - DATE
+    - REPLAYGAIN_ALBUM_GAIN
+    - REPLAYGAIN_TRACK_GAIN
+
 Collector:
   username: user21172121683
