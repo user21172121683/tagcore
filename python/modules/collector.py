@@ -2,6 +2,7 @@ import webbrowser
 from pathlib import Path
 from utils import setup_logger, returning_message
 
+
 class Collector:
     """
     Opens RYM album collection in a web browser.
