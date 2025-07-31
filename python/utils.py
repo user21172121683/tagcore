@@ -17,20 +17,18 @@ def index_files(
     try:
         files = []
         for root, _, filenames in os.walk(directory):
-            files.extend([os.path.join(root, file)
-                         for file in filenames if file.lower().endswith(f".{extension}")])
+            files.extend([os.path.join(root, file) for file in filenames if file.lower().endswith(f".{extension}")])
         if len(files) == 0:
-            logger.error(f"No {extension} files found. Exiting.")
+            logger.info(f"No {extension} files found.")
         else:
             logger.info(f"Found {len(files)} {extension} files.")
             with open(log_dir / f"{extension}_files.txt", "w", encoding="utf-8") as f:
-                logger.info(
-                    f"Writing indexed {extension} files to {log_dir}/{extension}_files.txt for debugging...")
+                logger.debug(f"Writing indexed {extension} files to {log_dir}/{extension}_files.txt for debugging...")
                 for file in files:
                     f.write(file + "\n")
         return files
     except FileNotFoundError:
-        logger.error(f"Master directory '{directory}' not found. Exiting.")
+        logger.critical(f"Master directory '{directory}' not found. Exiting.")
 
 
 def setup_logger(
@@ -89,6 +87,7 @@ def setup_logger(
 
 def processing_message(current, total, file):
     return f"({str(current).zfill(len(str(total)))}/{total}) Processing '{file}'..."
+
 
 def returning_message():
     return f"\n{'-'*100}\nReturning to main...\n{'-'*100}"
