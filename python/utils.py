@@ -1,4 +1,3 @@
-import os
 import sys
 import logging
 from datetime import datetime
@@ -9,26 +8,30 @@ def index_files(
     directory: Path,
     extension: str,
     logger: logging.Logger
-) -> list:
-    log_dir = Path(__file__).resolve().parent / "logs" / \
-        datetime.now().strftime('%Y-%m-%d')
-    log_dir.mkdir(exist_ok=True)
-    logger.info(f"Indexing {extension} files in {directory}...")
+) -> list[Path]:
+    log_dir = Path(__file__).resolve().parent / "logs" / datetime.now().strftime('%Y-%m-%d')
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    logger.info(f"Indexing .{extension} files in {directory}...")
+
     try:
-        files = []
-        for root, _, filenames in os.walk(directory):
-            files.extend([os.path.join(root, file) for file in filenames if file.lower().endswith(f".{extension}")])
-        if len(files) == 0:
-            logger.info(f"No {extension} files found.")
+        files = list(directory.rglob(f'*.{extension.lower()}'))
+        
+        if not files:
+            logger.info(f"No .{extension} files found.")
         else:
-            logger.info(f"Found {len(files)} {extension} files.")
-            with open(log_dir / f"{extension}_files.txt", "w", encoding="utf-8") as f:
-                logger.debug(f"Writing indexed {extension} files to {log_dir}/{extension}_files.txt for debugging...")
+            logger.info(f"Found {len(files)} .{extension} files.")
+            log_file = log_dir / f"{extension}_files.txt"
+            with open(log_file, "w", encoding="utf-8") as f:
+                logger.debug(f"Writing indexed .{extension} files to {log_file} for debugging...")
                 for file in files:
-                    f.write(file + "\n")
+                    f.write(str(file) + "\n")
+
         return files
+
     except FileNotFoundError:
         logger.critical(f"Master directory '{directory}' not found. Exiting.")
+        return []
 
 
 def setup_logger(
