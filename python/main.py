@@ -23,12 +23,10 @@ class App:
         # Setup logger
         self.logger = setup_logger("main", self.base_dir)
 
-        # Find and load config
-        self.config_path = self.find_config()
-        self.config = self.load_config()
-
-        # Discover scripts
-        self.scripts = self.discover_scripts()
+        # Initialise config and scripts
+        self.config_path = None
+        self.config = {}
+        self.scripts = {}
 
     def find_config(self) -> Path:
         """
@@ -110,11 +108,21 @@ class App:
             self.logger.error(f"Error running script '{name}': {e}", exc_info=True)
             print(f"An error occurred while running '{name}'. Check the logs for details.")
 
+    def refresh(self):
+        """
+        Refresh the configuration and script discovery.
+        Called each time the main menu is displayed.
+        """
+        self.config_path = self.find_config()
+        self.config = self.load_config()
+        self.scripts = self.discover_scripts()
+
 
 def main():
     app = App()
 
     while True:
+        app.refresh()
         print(f"\n{'='*100}\nWelcome back!\n{'='*100}\n\nAvailable scripts:")
         indexed_names = sorted(app.scripts.items())
         for i, (name, info) in enumerate(indexed_names, start=1):
