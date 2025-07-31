@@ -148,7 +148,7 @@ def main():
                 continue
         else:
             script_name = script_input
-
+        app.refresh()
         app.run_script(script_name)
 
 
