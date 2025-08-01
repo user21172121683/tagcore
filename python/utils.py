@@ -12,23 +12,14 @@ def index_files(
     log_dir = Path(__file__).resolve().parent / "logs" / datetime.now().strftime('%Y-%m-%d')
     log_dir.mkdir(parents=True, exist_ok=True)
 
-    logger.info(f"Indexing .{extension} files in {directory}...")
-
+    logger.info(f"Indexing {extension} files in {directory}...")
     try:
         files = list(directory.rglob(f'*.{extension.lower()}'))
-        
         if not files:
-            logger.info(f"No .{extension} files found.")
+            logger.info(f"No {extension} files found.")
         else:
-            logger.info(f"Found {len(files)} .{extension} files.")
-            log_file = log_dir / f"{extension}_files.txt"
-            with open(log_file, "w", encoding="utf-8") as f:
-                logger.debug(f"Writing indexed .{extension} files to {log_file} for debugging...")
-                for file in files:
-                    f.write(str(file) + "\n")
-
+            logger.info(f"Found {len(files)} {extension} files.")
         return files
-
     except FileNotFoundError:
         logger.critical(f"Master directory '{directory}' not found. Exiting.")
         return []
