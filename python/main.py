@@ -93,15 +93,19 @@ class App:
                 return
 
             try:
-                answer = input(f"{pformat(self.config[name], indent=2, width=80, sort_dicts=False)}\nRun {name} with the above config? (Y/n): ").strip().lower()
+                cls = self.scripts[name]["class"]
+
+                script_args = self.config[name].copy()
+
+                for key, value in self.config['General'].items():
+                    script_args[key] = value
+
+                answer = input(f"{pformat(script_args, indent=2, width=80, sort_dicts=True)}\nRun {name} with the above config? (Y/n): ").strip().lower()
                 if answer not in ("", "y", "yes"):
                     print("Aborting script run.")
                     return
-
-                cls = self.scripts[name]["class"]
+                
                 stop_flag = threading.Event()
-
-                script_args = self.config[name].copy()
                 script_args['stop_flag'] = stop_flag
 
                 instance = cls(**script_args)

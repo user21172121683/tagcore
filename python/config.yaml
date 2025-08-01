@@ -1,7 +1,9 @@
-Rymporter:
+General:
   dry_run: false
-  auto_skip: false
   master_dir: flac
+
+Rymporter:
+  auto_skip: false
   collection_html: d.rp,albjh,tn,v,o,g,n9999999.html
   field_definitions:
     album_id: RYM_ALBUMID
@@ -35,8 +37,6 @@ Rymporter:
     label_catalognr: false
 
 Flagger:
-  dry_run: false
-  master_dir: flac
   skip_integrity_check: false
   problems_field: PROBLEMS
   cover_target_size: [1000, 1000]
