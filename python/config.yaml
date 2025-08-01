@@ -62,3 +62,11 @@ Flagger:
 
 Collector:
   username: user21172121683
+
+Ogger:
+  ogg_dir: ogg
+  track_id_field: MUSICBRAINZ_RELEASETRACKID
+  filename_match: true
+  quality: 4
+  sample_rate: 44100
+  channels: 2
