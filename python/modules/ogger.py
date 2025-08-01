@@ -24,11 +24,11 @@ class Ogger:
         self.filename_match = config.get('filename_match', True)
         self.cover_target_size = tuple(config.get('cover_target_size', [600, 600]))
 
-        # Load files and build metadata indices
-        self.flac_files = index_files(self.flac_dir, extension='flac', logger=self.logger)
-        self.flac_metadata_index = self._build_metadata_index(self.flac_files)
-        self.ogg_files = index_files(self.ogg_dir, extension='ogg', logger=self.logger)
-        self.ogg_metadata_index = self._build_metadata_index(self.ogg_files)
+        # Initialise indices
+        self.flac_files = {}
+        self.flac_metadata_index = {}
+        self.ogg_files = {}
+        self.ogg_metadata_index = {}
 
         # Stats
         self._matched_ogg_paths = set()
@@ -52,8 +52,14 @@ class Ogger:
         }
 
     def run(self):
-        self._flac_files_processed = 0
+        # Build indices and prepare for processing
+        self.flac_files = index_files(self.flac_dir, extension='flac', logger=self.logger)
+        self.flac_metadata_index = self._build_metadata_index(self.flac_files)
+        self.ogg_files = index_files(self.ogg_dir, extension='ogg', logger=self.logger)
+        self.ogg_metadata_index = self._build_metadata_index(self.ogg_files)
+
         # Process each FLAC file and match with OGG files
+        self._flac_files_processed = 0
         for flac_file, flac_metadata in self.flac_metadata_index.items():
             if check_stop(self.stop_flag, self.logger):
                 break
