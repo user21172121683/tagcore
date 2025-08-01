@@ -16,10 +16,10 @@ class Flagger:
         self.logger = setup_logger("flagger", Path(__file__).resolve().parents[1])
 
         # Load configuration
-        self.master_dir = config['master_dir']
+        self.master_dir = Path(config['master_dir'])
         self.tags_to_check = config['tags_to_check']
         self.problems_field = config.get('problems_field', 'PROBLEMS')
-        self.cover_target_size = config.get('cover_target_size', (1000, 1000))
+        self.cover_target_size = tuple(config.get('cover_target_size', [1000, 1000]))
         self.cover_allowed_formats = config.get('cover_allowed_formats', ['jpg', 'jpeg'])
         self.cover_auto_resize = config.get('cover_auto_resize', False)
         self.cover_auto_delete = config.get('cover_auto_delete', False)
