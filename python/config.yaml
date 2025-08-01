@@ -44,7 +44,7 @@ Flagger:
   cover_auto_reformat: false
   cover_auto_delete: false
   cover_allowed_formats:
-    - jpg
+    - jpeg
   tags_to_check:
     - GENRE
     - MUSICBRAINZ_ALBUMID
