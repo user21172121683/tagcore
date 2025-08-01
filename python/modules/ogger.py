@@ -14,7 +14,7 @@ class Ogger:
         self.stop_flag = config.get("stop_flag")
 
         # Load configuration
-        self.flac_dir = Path(config['master_dir'])
+        self.flac_dir = Path(config['main_dir'])
         self.ogg_dir = Path(config['ogg_dir'])
         self.dry_run = config.get('dry_run', True)
         self.quality = config.get('quality', 4)

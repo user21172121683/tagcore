@@ -21,7 +21,7 @@ def index_files(
             logger.info(f"Found {len(files)} {extension} files.")
         return files
     except FileNotFoundError:
-        logger.critical(f"Master directory '{directory}' not found. Exiting.")
+        logger.critical(f"Main directory '{directory}' not found. Exiting.")
         return []
 
 

@@ -20,7 +20,7 @@ class Flagger:
         self.stop_flag: Event = config.get("stop_flag")
 
         # Load configuration
-        self.master_dir = Path(config['master_dir'])
+        self.main_dir = Path(config['main_dir'])
         self.tags_to_check = config['tags_to_check']
         self.problems_field = config.get('problems_field', 'PROBLEMS')
         self.cover_target_size = tuple(config.get('cover_target_size', [1000, 1000]))
@@ -32,7 +32,7 @@ class Flagger:
         self.dry_run = config.get('dry_run', True)
 
         # Set internal state
-        self.files = index_files(directory=self.master_dir, extension='flac', logger=self.logger)
+        self.files = index_files(directory=self.main_dir, extension='flac', logger=self.logger)
         self._files_processed = 0
         self._files_flagged = 0
         self._files_flagged_already = 0

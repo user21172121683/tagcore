@@ -18,7 +18,7 @@ class Rymporter:
 
         Args:
             config (dict): Configuration dictionary with keys:
-                - master_dir (str): Directory containing FLAC files.
+                - main_dir (str): Directory containing FLAC files.
                 - field_definitions (dict): Mapping of tag keys to metadata field names.
                 - collection_html (str): Path to the RYM collection HTML file.
                 - fields_to_modify (dict): Fields that should be updated.
@@ -29,7 +29,7 @@ class Rymporter:
         self.logger = setup_logger("rymporter", Path(__file__).resolve().parents[1])
 
         # Load configuration
-        self.master_dir = config["master_dir"]
+        self.main_dir = config["main_dir"]
         self.field_definitions = config["field_definitions"]
         self.collection_html_file = config["collection_html"]
         self.fields_to_modify = config["fields_to_modify"]
@@ -37,10 +37,10 @@ class Rymporter:
         self.auto_skip = config.get("auto_skip", False)
 
         # Set internal state
-        self.files = index_files(directory=self.master_dir, extension="flac", logger=self.logger)
+        self.files = index_files(directory=self.main_dir, extension="flac", logger=self.logger)
         if len(self.files) == 0:
-            self.logger.critical(f"No flac files found in {self.master_dir}.")
-            raise RuntimeError(f"No flac files found in {self.master_dir}.")
+            self.logger.critical(f"No flac files found in {self.main_dir}.")
+            raise RuntimeError(f"No flac files found in {self.main_dir}.")
         self.rym_albums = []
         self._manual_matches = {}
         self._albums_to_skip = []

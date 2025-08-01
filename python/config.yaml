@@ -1,6 +1,6 @@
 General:
   dry_run: false
-  master_dir: flac
+  main_dir: flac
 
 Rymporter:
   auto_skip: false
