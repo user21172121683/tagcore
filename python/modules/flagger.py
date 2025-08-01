@@ -2,8 +2,9 @@ from PIL import Image
 import io
 import subprocess
 from mutagen.flac import FLAC
-from utils import index_files, setup_logger, processing_message, returning_message
+from utils import index_files, setup_logger, processing_message, returning_message, check_stop
 from pathlib import Path
+from threading import Event
 
 
 class Flagger:
@@ -33,11 +34,16 @@ class Flagger:
         self._files_flagged = 0
         self._files_flagged_already = 0
         self._files_failed = []
+
+        # Stop flag (for safe quitting)
+        self.stop_flag: Event = config.get("stop_flag")
     
     def run(self):
         self._files_processed = 0
         self._files_flagged = 0
         for file in self.files:
+            if check_stop(self.stop_flag, self.logger):
+                break
             problems = []
             self._files_processed += 1
             self.logger.info(processing_message(self._files_processed, len(self.files), file))
