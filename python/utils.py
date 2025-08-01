@@ -80,7 +80,7 @@ def setup_logger(
 
 
 def processing_message(current, total, file):
-    return f"({str(current).zfill(len(str(total)))}/{total}) Processing '{file}'..."
+    return f"({str(current).zfill(len(str(total)))}/{total}) Processing: {file}"
 
 
 def returning_message():
