@@ -85,3 +85,14 @@ def processing_message(current, total, file):
 
 def returning_message():
     return f"\n{'-'*100}\nReturning to main...\n{'-'*100}"
+
+
+def check_stop(stop_flag, logger):
+    """
+    Checks whether the stop_flag is set.
+    If set, logs a message (if logger is provided) and returns True.
+    """
+    if stop_flag and hasattr(stop_flag, 'is_set') and stop_flag.is_set():
+        logger.warning("Stop flag received. Exiting early.")
+        return True
+    return False

@@ -4,6 +4,7 @@ import importlib.util
 from pathlib import Path
 from pprint import pformat
 from utils import setup_logger
+import threading
 
 
 class App:
@@ -83,29 +84,53 @@ class App:
         return scripts
 
     def run_script(self, name: str):
-        """
-        Run the script identified by name if found.
-        Uses the configuration parameters loaded for that script.
-        """
-        if name not in self.scripts:
-            print(f"Script '{name}' not found.")
-            return
-
-        if name not in self.config:
-            print(f"No config found for '{name}' in {self.config_path}")
-            return
-
-        try:
-            answer = input(f"{pformat(self.config[name], indent=2, width=80, sort_dicts=False)}\nRun {name} with the above config? (Y/n): ").strip().lower()
-            if answer not in ("", "y", "yes"):
-                print("Aborting script run.")
+            if name not in self.scripts:
+                print(f"Script '{name}' not found.")
                 return
-            cls = self.scripts[name]["class"]
-            instance = cls(**self.config[name])
-            instance.run()
-        except Exception as e:
-            self.logger.error(f"Error running script '{name}': {e}", exc_info=True)
-            print(f"An error occurred while running '{name}'. Check the logs for details.")
+
+            if name not in self.config:
+                print(f"No config found for '{name}' in {self.config_path}")
+                return
+
+            try:
+                answer = input(f"{pformat(self.config[name], indent=2, width=80, sort_dicts=False)}\nRun {name} with the above config? (Y/n): ").strip().lower()
+                if answer not in ("", "y", "yes"):
+                    print("Aborting script run.")
+                    return
+
+                cls = self.scripts[name]["class"]
+                stop_flag = threading.Event()
+
+                script_args = self.config[name].copy()
+                script_args['stop_flag'] = stop_flag
+
+                instance = cls(**script_args)
+
+                def target():
+                    try:
+                        instance.run()
+                    except Exception as e:
+                        self.logger.error(f"Error running script '{name}': {e}", exc_info=True)
+                        print(f"An error occurred while running '{name}'. Check the logs for details.")
+
+                thread = threading.Thread(target=target)
+                thread.start()
+
+                print("Script is running. Type 'q' then press Enter to stop it.")
+                while thread.is_alive():
+                    user_input = input()
+                    if user_input.strip().lower() == "q":
+                        print("Stopping script...")
+                        stop_flag.set()
+                        thread.join()
+                        break
+
+                if not thread.is_alive():
+                    print("Script finished.")
+
+            except Exception as e:
+                self.logger.error(f"Error launching script '{name}': {e}", exc_info=True)
+                print(f"An error occurred while launching '{name}'. Check the logs for details.")
 
     def refresh(self):
         """
