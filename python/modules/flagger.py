@@ -16,6 +16,9 @@ class Flagger:
         # Setup logger
         self.logger = setup_logger("flagger", Path(__file__).resolve().parents[1])
 
+        # Stop flag (for safe quitting)
+        self.stop_flag: Event = config.get("stop_flag")
+
         # Load configuration
         self.master_dir = Path(config['master_dir'])
         self.tags_to_check = config['tags_to_check']
@@ -34,9 +37,6 @@ class Flagger:
         self._files_flagged = 0
         self._files_flagged_already = 0
         self._files_failed = []
-
-        # Stop flag (for safe quitting)
-        self.stop_flag: Event = config.get("stop_flag")
     
     def run(self):
         self._files_processed = 0
