@@ -76,7 +76,6 @@ class App:
                             "class_name": obj.__name__,
                             "doc": (obj.__doc__ or "").strip().splitlines()[0] if obj.__doc__ else ""
                         }
-                        self.logger.debug(f"Discovered: {module_name} → {obj.__name__}")
                         break
 
             except Exception as e:
@@ -113,6 +112,7 @@ class App:
         Refresh the configuration and script discovery.
         Called each time the main menu is displayed.
         """
+        self.logger.debug("Refreshing configuration and scripts...")
         self.config_path = self.find_config()
         self.config = self.load_config()
         self.scripts = self.discover_scripts()
