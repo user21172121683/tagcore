@@ -101,7 +101,7 @@ class Ogger:
             self.logger.info(f"Deleted {self._ogg_files_deleted} unmatched OGG files.")
         self.logger.info(returning_message())
 
-    def _build_metadata_index(self, files):
+    def _build_metadata_index(self, files: list[Path]) -> dict:
         self.logger.info("Building metadata index...")
         index = {}
         for file in files:
@@ -130,7 +130,7 @@ class Ogger:
                 files.remove(file)
         return index
 
-    def _match_files(self, flac_file, flac_metadata):
+    def _match_files(self, flac_file: Path, flac_metadata: dict) -> Path | None:
         flac_audio = FLAC(flac_file)
         matched = False
         for ogg_file, ogg_metadata in self.ogg_metadata_index.items():
@@ -164,7 +164,7 @@ class Ogger:
             self.logger.warning("No match found!")
             return None
 
-    def _sync_metadata(self, flac_file, ogg_file):
+    def _sync_metadata(self, flac_file: Path, ogg_file: Path):
         flac_audio = FLAC(flac_file)
         ogg_audio = OggVorbis(ogg_file)
 
@@ -197,7 +197,7 @@ class Ogger:
         else:
             self.logger.debug(f"Path verified.")
     
-    def _verify_stream(self, ogg_file):
+    def _verify_stream(self, ogg_file: Path) -> bool:
         verified = True
         try:
             ogg_audio = OggVorbis(ogg_file)
@@ -221,7 +221,7 @@ class Ogger:
             self.logger.error(f"Error verifying bitrate for {ogg_file}: {e}")
             return False
 
-    def _convert_file(self, flac_file, ogg_file):
+    def _convert_file(self, flac_file: Path, ogg_file: Path):
         command = [
             "ffmpeg", "-y", "-loglevel", "error",
             "-i", flac_file,
@@ -241,7 +241,7 @@ class Ogger:
         except subprocess.CalledProcessError as e:
             self.logger.error(f"ffmpeg failed for {flac_file}: {e}")
 
-    def _vorbis_fix_hack(self, ogg_file):
+    def _vorbis_fix_hack(self, ogg_file: Path):
         self.logger.debug(f"Fixing OGG metadata...")
         # TODO: find a better solution to this hack
         audio = OggVorbis(ogg_file)
