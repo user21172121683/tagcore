@@ -180,7 +180,7 @@ class Ogger:
             else:
                 self.logger.info(f"[DRY RUN] File remains unmodified.")
         else:
-            self.logger.debug(f"OGG metadata already matches FLAC.")
+            self.logger.debug(f"Metadata verified.")
 
         # If filename mismatch, rename OGG to match FLAC filename
         if flac_file.relative_to(self.flac_dir).with_suffix('') != ogg_file.relative_to(self.ogg_dir).with_suffix(""):
@@ -194,7 +194,7 @@ class Ogger:
                 self.logger.info(f"[DRY RUN] Would rename OGG file.")
             self._ogg_files_renamed += 1
         else:
-            self.logger.debug(f"OGG file already matches FLAC structure.")
+            self.logger.debug(f"Path verified.")
     
     def _verify_stream(self, ogg_file):
         verified = True
