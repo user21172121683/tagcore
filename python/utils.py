@@ -12,7 +12,7 @@ def index_files(
     log_dir = Path(__file__).resolve().parent / "logs" / datetime.now().strftime('%Y-%m-%d')
     log_dir.mkdir(parents=True, exist_ok=True)
 
-    logger.info(f"Indexing {extension} files in {directory}...")
+    logger.info(f"Indexing {extension} files in {directory.resolve()}...")
     try:
         files = list(directory.rglob(f'*.{extension.lower()}'))
         if not files:
@@ -21,7 +21,7 @@ def index_files(
             logger.info(f"Found {len(files)} {extension} files.")
         return files
     except FileNotFoundError:
-        logger.critical(f"Main directory '{directory}' not found. Exiting.")
+        logger.critical(f"Main directory '{directory.resolve()}' not found. Exiting.")
         return []
 
 
