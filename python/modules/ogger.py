@@ -26,12 +26,13 @@ class Ogger:
         self.cover_target_size = tuple(config.get('cover_target_size', [600, 600]))
 
         # Initialise indices
-        self.flac_files = {}
+        self.flac_files = []
         self.flac_metadata_index = {}
-        self.ogg_files = {}
+        self.ogg_files = []
         self.ogg_metadata_index = {}
 
         # Stats
+        self._unmatched_ogg_paths = set()
         self._matched_ogg_paths = set()
         self._flac_files_processed = []
         self._ogg_files_converted = []
@@ -59,6 +60,9 @@ class Ogger:
         self.flac_files = index_files(self.flac_dir, extension='flac', logger=self.logger)
         self.ogg_files = index_files(self.ogg_dir, extension='ogg', logger=self.logger)
         self.ogg_metadata_index = self._build_metadata_index(self.ogg_files)
+
+        # Initialise set for unmatched ogg files
+        self._unmatched_ogg_paths = set(self.ogg_files)
 
         # Process each FLAC file and match with OGG files
         for flac_file in self.flac_files:
@@ -111,6 +115,8 @@ class Ogger:
             if check_stop(self.stop_flag, self.logger):
                 break
             try:
+                track_id = None
+                # Detect file type and extract metadata
                 if file.suffix.lower() == ".ogg":
                     tags = dict(OggVorbis(file).items())
                 elif file.suffix.lower() == ".flac":
@@ -119,9 +125,12 @@ class Ogger:
                     self.logger.warning(f"Unsupported file type: {file}")
                     continue
 
+                # Get track_id field (assuming it's a valid metadata field)
+                track_id = tags.get(self.track_id_field, None)
                 # Create a hashable "fingerprint" from the metadata
                 fingerprint = self._generate_fingerprint(tags)
-                index[file] = fingerprint
+                # Add both the fingerprint and track_id to the index
+                index[file] = (fingerprint, track_id)
                 
             except Exception as e:
                 self.logger.error(f"Error processing file {file}: {e}")
@@ -150,45 +159,43 @@ class Ogger:
         # Generate the fingerprint of the FLAC file metadata
         self.logger.debug(f"Generating fingerprint...")
         flac_fingerprint = self._generate_fingerprint(flac_audio)
-        self.flac_metadata_index[flac_file] = flac_fingerprint
+        self.flac_metadata_index[flac_file] = (flac_fingerprint, flac_audio.get(self.track_id_field, None))
+
+        self.logger.debug("Trying to find a match...")
+        # Match by track ID field if specified
+        self.logger.debug("Matching by metadata...")
+        for ogg_file, (ogg_fingerprint, ogg_track_id) in self.ogg_metadata_index.items():
+            if ogg_file in self._unmatched_ogg_paths:
+                if self.track_id_field and self.flac_metadata_index[flac_file][1] and ogg_track_id and self.flac_metadata_index[flac_file][1] == ogg_track_id:
+                    self.logger.info(f"Track ID match: {ogg_file}")
+                    match = ogg_file
+                    break
+                if flac_fingerprint == ogg_fingerprint:
+                    self.logger.info(f"Fingerprint match: {ogg_file}")
+                    match = ogg_file
+                    break
 
         # Match by filename if filename_match is enabled
-        self.logger.debug("Trying to find a match...")
-        if self.filename_match:
+        if self.filename_match and not match:
             self.logger.debug(f"Matching by filename...")
-            for ogg_file, ogg_fingerprint in self.ogg_metadata_index.items():
-                if flac_file.with_suffix("") == ogg_file.with_suffix(""):
-                    self.logger.info(f"Filename match: {ogg_file}")
-                    match = ogg_file
-                    break
-
-        # Match by track ID field if specified
-        if not match:
-            if self.track_id_field and flac_audio.get(self.track_id_field):
-                self.logger.debug(f"Matching by track ID field: {self.track_id_field}")
-                for ogg_file, ogg_fingerprint in self.ogg_metadata_index.items():
-                    if ogg_file in self._matched_ogg_paths:
-                        continue
-                    ogg_audio = OggVorbis(ogg_file)
-                    if flac_audio.get(self.track_id_field) == ogg_audio.get(self.track_id_field):
-                        self.logger.info(f"Matched by {self.track_id_field}: {ogg_file}")
+            for ogg_file in self.ogg_files:
+                if ogg_file in self._unmatched_ogg_paths:
+                    if flac_file.relative_to(self.flac_dir).with_suffix('') == ogg_file.relative_to(self.ogg_dir).with_suffix(""):
+                        self.logger.info(f"Filename match: {ogg_file}")
                         match = ogg_file
                         break
-
-        # Match by fingerprint (hashed metadata)
+        
         if not match:
-            self.logger.debug("Matching by fingerprint...")
-            for ogg_file, ogg_fingerprint in self.ogg_metadata_index.items():
-                if flac_fingerprint == ogg_fingerprint:
-                    self.logger.info(f"Exact fingerprint match: {ogg_file}")
-                    match = ogg_file
-                    break
+            self.logger.info(f"No match found!")
+        else:
+            self._unmatched_ogg_paths.remove(match)
+            self._matched_ogg_paths.add(match)
 
         return match
 
     def _sync_metadata(self, flac_file: Path, ogg_file: Path):
         # Check if OGG metadata matches FLAC
-        if self.flac_metadata_index[flac_file] != self.ogg_metadata_index[ogg_file]:
+        if self.flac_metadata_index[flac_file][0] != self.ogg_metadata_index[ogg_file][0]:
             flac_audio = FLAC(flac_file)
             ogg_audio = OggVorbis(ogg_file)
             self.logger.info(f"Updating OGG metadata from FLAC...")
@@ -281,8 +288,7 @@ class Ogger:
 
     def _clean(self):
         self.logger.info("Cleaning up unmatched OGG files and empty directories...")
-        unmatched_ogg_files = set(self.ogg_files) - self._matched_ogg_paths
-        for ogg_file in unmatched_ogg_files:
+        for ogg_file in self._unmatched_ogg_files:
             if self.dry_run:
                 self.logger.info(f"[DRY RUN] Would delete unmatched OGG file: {ogg_file}")
             else:
