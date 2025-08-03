@@ -3,7 +3,7 @@ import yaml
 import importlib.util
 from pathlib import Path
 from pprint import pformat
-from utils import setup_logger
+from utils import setup_logger, clear_caches
 import threading
 
 
@@ -161,35 +161,39 @@ class App:
 def main():
     app = App()
 
-    while True:
-        app.refresh()
-        print(f"\n{'='*100}\nWelcome back!\n{'='*100}\n\nAvailable scripts:")
-        indexed_names = sorted(app.scripts.items())
-        for i, (name, info) in enumerate(indexed_names, start=1):
-            description = info.get("doc", "")
-            display_name = info['class_name']
-            if description:
-                display_name += f": {description}"
-            print(f"  [{i}] {display_name}")
+    try:
+        while True:
+            app.refresh()
+            print(f"\n{'='*100}\nWelcome back!\n{'='*100}\n\nAvailable scripts:")
+            indexed_names = sorted(app.scripts.items())
+            for i, (name, info) in enumerate(indexed_names, start=1):
+                description = info.get("doc", "")
+                display_name = info['class_name']
+                if description:
+                    display_name += f": {description}"
+                print(f"  [{i}] {display_name}")
 
-        script_input = input("\nEnter script number or class name (or press Enter to quit): ").strip()
+            script_input = input("\nEnter script number or class name (or press Enter to quit): ").strip()
 
-        if not script_input:
-            print("Goodbye!")
-            break
+            if not script_input:
+                break
 
-        # Try interpreting the input as a number
-        if script_input.isdigit():
-            idx = int(script_input) - 1
-            if 0 <= idx < len(indexed_names):
-                script_name = indexed_names[idx][0]
+            # Try interpreting the input as a number
+            if script_input.isdigit():
+                idx = int(script_input) - 1
+                if 0 <= idx < len(indexed_names):
+                    script_name = indexed_names[idx][0]
+                else:
+                    print("Invalid number.")
+                    continue
             else:
-                print("Invalid number.")
-                continue
-        else:
-            script_name = script_input
-        app.refresh()
-        app.run_script(script_name)
+                script_name = script_input
+            app.refresh()
+            app.run_script(script_name)
+    finally:
+        # Ensure caches are cleared before quitting
+        clear_caches()
+        print("Goodbye!")
 
 
 if __name__ == "__main__":

@@ -3,6 +3,7 @@ import logging
 from datetime import datetime
 from pathlib import Path
 from threading import Event
+import shutil
 
 
 def index_files(
@@ -78,6 +79,31 @@ def setup_logger(
     logger.info(f"\n{'-'*100}\nStarting {name}...\n{'-'*100}")
 
     return logger
+
+
+def clear_caches():
+    """
+    Clears Python's cache after quitting:
+    - Removes all __pycache__ directories.
+    - Clears sys.modules cache.
+    """
+    # Use the directory where the script is located (main.py's directory)
+    base_path = Path(__file__).resolve().parent  # Start from where main.py is located
+    
+    # Clear all __pycache__ directories using pathlib
+    for pycache_dir in base_path.rglob("__pycache__"):
+        try:
+            shutil.rmtree(pycache_dir)
+            print(f"Cleared cache at {pycache_dir}")
+        except Exception as e:
+            print(f"Error clearing cache at {pycache_dir}: {e}")
+
+    # Clear sys.modules cache (effectively unload modules)
+    for module_name in list(sys.modules.keys()):
+        if module_name not in ('__main__', 'builtins'):  # Don't remove builtins or main module
+            del sys.modules[module_name]
+
+    print("Cleared Python caches.")
 
 
 def processing_message(current: int, total: int, file: Path) -> str:
