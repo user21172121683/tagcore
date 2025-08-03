@@ -32,10 +32,10 @@ class Ogger:
 
         # Stats
         self._matched_ogg_paths = set()
-        self._flac_files_processed = 0
-        self._ogg_files_converted = 0
-        self._ogg_files_renamed = 0
-        self._ogg_files_deleted = 0
+        self._flac_files_processed = []
+        self._ogg_files_converted = []
+        self._ogg_files_renamed = []
+        self._ogg_files_deleted = []
 
         # Map quality levels to bitrates
         self.BITRATE_QUALITY_MAP = {
@@ -60,12 +60,11 @@ class Ogger:
         self.ogg_metadata_index = self._build_metadata_index(self.ogg_files)
 
         # Process each FLAC file and match with OGG files
-        self._flac_files_processed = 0
         for flac_file, flac_metadata in self.flac_metadata_index.items():
             if check_stop(self.stop_flag, self.logger):
                 break
-            self._flac_files_processed += 1
-            self.logger.info(processing_message(self._flac_files_processed, len(self.flac_files), flac_file))
+            self._flac_files_processed.append(flac_file)
+            self.logger.info(processing_message(len(self._flac_files_processed), len(self.flac_files), flac_file))
             match = self._match_files(flac_file, flac_metadata)
             # If no match found, convert FLAC to OGG
             if not match:
@@ -73,7 +72,7 @@ class Ogger:
                 ogg_output.parent.mkdir(parents=True, exist_ok=True)
                 if not self.dry_run:
                     self._convert_file(str(flac_file), str(ogg_output))
-                self._ogg_files_converted += 1
+                self._ogg_files_converted.append(ogg_output)
             # Sync metadata and rename OGG files if necessary
             else:
                 if not self._verify_stream(match):
@@ -81,7 +80,7 @@ class Ogger:
                     ogg_output.parent.mkdir(parents=True, exist_ok=True)
                     if not self.dry_run:
                         self._convert_file(str(flac_file), str(ogg_output))
-                    self._ogg_files_converted += 1
+                    self._ogg_files_converted.append(ogg_output)
                 else:
                     self._sync_metadata(flac_file, match)
             self.logger.info(f"File is up to date!")
@@ -92,13 +91,13 @@ class Ogger:
 
         # Final summary
         self.logger.info(f"\n{'-'*100}\nOgger summary\n{'-'*100}")
-        self.logger.info(f"Processed {self._flac_files_processed} FLAC files.")
-        if self._ogg_files_converted > 0:
-            self.logger.info(f"Converted {self._ogg_files_converted} FLAC files to OGG.")
-        if self._ogg_files_renamed > 0:
-            self.logger.info(f"Renamed {self._ogg_files_renamed} OGG files to match FLAC structure.")
-        if self._ogg_files_deleted > 0:
-            self.logger.info(f"Deleted {self._ogg_files_deleted} unmatched OGG files.")
+        self.logger.info(f"Processed {len(self._flac_files_processed)} FLAC files.")
+        if len(self._ogg_files_converted) > 0:
+            self.logger.info(f"Converted {len(self._ogg_files_converted)} FLAC files to OGG.")
+        if len(self._ogg_files_renamed) > 0:
+            self.logger.info(f"Renamed {len(self._ogg_files_renamed)} OGG files to match FLAC structure.")
+        if len(self._ogg_files_deleted) > 0:
+            self.logger.info(f"Deleted {len(self._ogg_files_deleted)} unmatched OGG files.")
         self.logger.info(returning_message())
 
     def _build_metadata_index(self, files: list[Path]) -> dict:
@@ -193,7 +192,7 @@ class Ogger:
                 self.logger.info(f"Renamed OGG file.")
             else:
                 self.logger.info(f"[DRY RUN] Would rename OGG file.")
-            self._ogg_files_renamed += 1
+            self._ogg_files_renamed.append(target_path)
         else:
             self.logger.debug(f"Path verified.")
     
@@ -258,7 +257,6 @@ class Ogger:
 
     def _clean(self):
         self.logger.info("Cleaning up unmatched OGG files and empty directories...")
-        self._ogg_files_deleted = 0
         unmatched_ogg_files = set(self.ogg_files) - self._matched_ogg_paths
         for ogg_file in unmatched_ogg_files:
             if self.dry_run:
@@ -266,7 +264,7 @@ class Ogger:
             else:
                 self.logger.info(f"Deleting unmatched OGG file: {ogg_file}")
                 ogg_file.unlink()
-            self._ogg_files_deleted += 1
+            self._ogg_files_deleted.append(ogg_file)
 
         # Traverse the directory tree bottom-up
         for dir_path in sorted(self.ogg_dir.rglob('*'), key=lambda p: -len(p.parts)):
