@@ -155,6 +155,7 @@ class Ogger:
         # Match by filename if filename_match is enabled
         self.logger.debug("Trying to find a match...")
         if self.filename_match:
+            self.logger.debug(f"Matching by filename...")
             for ogg_file, ogg_fingerprint in self.ogg_metadata_index.items():
                 if flac_file.with_suffix("") == ogg_file.with_suffix(""):
                     self.logger.info(f"Filename match: {ogg_file}")
@@ -164,6 +165,7 @@ class Ogger:
         # Match by track ID field if specified
         if not match:
             if self.track_id_field and flac_audio.get(self.track_id_field):
+                self.logger.debug(f"Matching by track ID field: {self.track_id_field}")
                 for ogg_file, ogg_fingerprint in self.ogg_metadata_index.items():
                     if ogg_file in self._matched_ogg_paths:
                         continue
@@ -175,6 +177,7 @@ class Ogger:
 
         # Match by fingerprint (hashed metadata)
         if not match:
+            self.logger.debug("Matching by fingerprint...")
             for ogg_file, ogg_fingerprint in self.ogg_metadata_index.items():
                 if flac_fingerprint == ogg_fingerprint:
                     self.logger.info(f"Exact fingerprint match: {ogg_file}")
