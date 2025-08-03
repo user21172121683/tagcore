@@ -36,6 +36,7 @@ class Ogger:
         self._ogg_files_converted = []
         self._ogg_files_renamed = []
         self._ogg_files_deleted = []
+        self._ogg_files_modified = []
 
         # Map quality levels to bitrates
         self.BITRATE_QUALITY_MAP = {
@@ -94,6 +95,8 @@ class Ogger:
         self.logger.info(f"Processed {len(self._flac_files_processed)} FLAC files.")
         if len(self._ogg_files_converted) > 0:
             self.logger.info(f"Converted {len(self._ogg_files_converted)} FLAC files to OGG.")
+        if len(self._ogg_files_modified) > 0:
+            self.logger.info(f"Modified metadata for {len(self._ogg_files_modified)} OGG files.")
         if len(self._ogg_files_renamed) > 0:
             self.logger.info(f"Renamed {len(self._ogg_files_renamed)} OGG files to match FLAC structure.")
         if len(self._ogg_files_deleted) > 0:
@@ -179,6 +182,7 @@ class Ogger:
                 self.logger.info(f"Updated OGG metadata.")
             else:
                 self.logger.info(f"[DRY RUN] File remains unmodified.")
+            self._ogg_files_modified.append(ogg_file)
         else:
             self.logger.debug(f"Metadata verified.")
 
