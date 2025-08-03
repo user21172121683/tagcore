@@ -49,10 +49,18 @@ def setup_logger(
             message = super().format(record)
             return f"{color}{message}{self.COLORS['RESET']}"
 
-    # Setup log directory
+    # Setup log directory and file paths
     log_dir = base_dir / "logs" / datetime.now().strftime('%Y-%m-%d')
     log_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / f"{name}.log"
+    archive_dir = log_dir / "archive"
+    archive_dir.mkdir(parents=True, exist_ok=True)
+
+    # Check if a log file with the same name exists and move it to archive
+    if log_file.exists():
+        archive_file = archive_dir / f"{name}_{datetime.now().strftime('%H-%M-%S')}.log"
+        shutil.move(str(log_file), str(archive_file))
+        print(f"Moved existing log file to archive: {archive_file}")
 
     # Create and configure logger
     logger = logging.getLogger(name)
@@ -65,13 +73,13 @@ def setup_logger(
     console_formatter = ColorFormatter("[%(levelname)s] %(message)s")
     console_handler.setFormatter(console_formatter)
 
-    # File handler
+    # File handler (the log file now has a timestamp in its name)
     file_handler = logging.FileHandler(log_file)
     file_handler.setLevel(logging.DEBUG)
-    file_formatter = logging.Formatter(
-        "%(asctime)s [%(levelname)s] %(message)s")
+    file_formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
     file_handler.setFormatter(file_formatter)
 
+    # Add handlers to logger
     logger.addHandler(console_handler)
     logger.addHandler(file_handler)
     logger.propagate = False
