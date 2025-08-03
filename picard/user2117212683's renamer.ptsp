@@ -30,6 +30,6 @@ script: "$set(_albumTitleMaxLength,100)\n$set(_trackFilenameMaxLength,80)\n\n$no
   \ is still exceeded, trim to allowed length and add \"...\" to the end\n)\n$set(_trackTitle,\n\
   $replace($rreplace($join(%artists%,; ),;\\(?!.*;\\), &),;,\\,) - %title%)\n$if($gt($len(%_trackTitle%),%_trackFilenameMaxLength%),$set(_trackTitle,%title%))\n\
   $if($gt($len(%_trackTitle%),%_trackFilenameMaxLength%),$set(_trackTitle,$left(%title%,$sub(%_trackFilenameMaxLength%,3))...))\n\
-  \n$noop(FINAL STRING)\n%_extension%/[_picard]/%_artistFolder%/%_Year% - %_albumTitle%/%_trackNumber%\
+  \n$noop(FINAL STRING)\n%_extension%/%_artistFolder%/%_Year% - %_albumTitle%/%_trackNumber%\
   \ - %_trackTitle%\n"
 id: 1218eba9-168c-44bb-afcd-2edfcf5b21bc
