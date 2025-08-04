@@ -3,8 +3,8 @@ import yaml
 import importlib.util
 from pathlib import Path
 from pprint import pformat
-from utils import clear_caches
 import threading
+import shutil
 
 
 class App:
@@ -154,6 +154,30 @@ class App:
         self.config = self.load_config()
         self.scripts = self.discover_scripts()
 
+    def clear_caches(self):
+        """
+        Clears Python's cache after quitting:
+        - Removes all __pycache__ directories.
+        - Clears sys.modules cache.
+        """
+        # Use the directory where the script is located
+        base_path = Path(__file__).resolve().parent
+        
+        # Clear all __pycache__ directories using pathlib
+        for pycache_dir in base_path.rglob("__pycache__"):
+            try:
+                shutil.rmtree(pycache_dir)
+                print(f"Cleared cache at {pycache_dir}")
+            except Exception as e:
+                print(f"Error clearing cache at {pycache_dir}: {e}")
+
+        # Clear sys.modules cache
+        for module_name in list(sys.modules.keys()):
+            if module_name not in ('__main__', 'builtins'):
+                del sys.modules[module_name]
+
+        print("Cleared Python caches.")
+
 
 def main():
     app = App()
@@ -189,7 +213,7 @@ def main():
             app.run_script(script_name)
     finally:
         # Ensure caches are cleared before quitting
-        clear_caches()
+        app.clear_caches()
         print("Goodbye!")
 
 
