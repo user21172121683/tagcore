@@ -41,7 +41,7 @@ class Rymporter:
         self._albums_to_skip = []
         self._insufficient_metadata = []
         self._files_processed = 0
-        self._files_modified = 0
+        self._files_modified = []
 
     def run(self):
         """
@@ -60,7 +60,7 @@ class Rymporter:
 
         self.logger.info(summary_message("Rymporter"))
         self.logger.info(f"Total files processed: {self._files_processed}")
-        self.logger.info(("[DRY RUN] " if self.dry_run else "") + f"Total files modified: {self._files_modified}")
+        self.logger.info(("[DRY RUN] " if self.dry_run else "") + f"Total files modified: {len(self._files_modified)}")
         if self._albums_to_skip:
             self.logger.warning(f"Unmatched albums skipped: {len(self._albums_to_skip)}")
 
@@ -129,14 +129,14 @@ class Rymporter:
                 if rym_album_id == audio_album_id:
                     self.logger.debug(f"Matched via ID: {rym_album_str}")
                     matched = True
-                    self._update_album(rym_album, audio)
+                    self._update_album(rym_album, audio, file)
                     break
 
                 # Match by normalized artist and album title
                 if rym_artist == audio_artist and rym_album_title == audio_album_title:
                     self.logger.debug(f"Matched via artist-title: {rym_album_str}")
                     matched = True
-                    self._update_album(rym_album, audio)
+                    self._update_album(rym_album, audio, file)
                     break
 
                 # Check manual matches
@@ -144,7 +144,7 @@ class Rymporter:
                     if rym_album_id == input_id and input_artist == audio_artist and input_title == audio_album_title:
                         self.logger.debug(f"Matched via manual input: {rym_album_str}")
                         matched = True
-                        self._update_album(rym_album, audio)
+                        self._update_album(rym_album, audio, file)
                         break
 
                 # No match found after last album in list
@@ -164,7 +164,7 @@ class Rymporter:
                                 self.logger.info(f"User confirmed match: {input_id}")
                                 matched = True
                                 self._manual_matches[input_id] = (audio_artist, audio_album_title)
-                                self._update_album(rym_album, audio)
+                                self._update_album(rym_album, audio, file)
                                 break
                         if not matched:
                             self.logger.warning(f"No album found with ID: {input_id}. Skipping...")
@@ -177,7 +177,7 @@ class Rymporter:
             self.logger.error(f"Error processing {file}: {type(e).__name__}: {e}")
             self.logger.error("Traceback:\n" + traceback.format_exc())
 
-    def _update_album(self, rym_album: dict, audio: FLAC):
+    def _update_album(self, rym_album: dict, audio: FLAC, file: Path):
         """
         Update the FLAC file metadata with data from a matched RYM album.
 
@@ -196,7 +196,7 @@ class Rymporter:
                 self.logger.debug(f"  {field_name.upper()} = {', '.join(map(str, new_values))}")
                 audio[field_name.upper()] = new_values
                 modified = True
-                self._files_modified += 1
+                self._files_modified.append(file)
             else:
                 self.logger.debug(f"  {field_name.upper()} is unchanged. Skipping update.")
 
