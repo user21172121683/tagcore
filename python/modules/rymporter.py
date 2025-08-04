@@ -1,8 +1,6 @@
 from mutagen.flac import FLAC
-from pprint import pformat
 import traceback
-from utils import index_files, setup_logger, processing_message, returning_message
-from datetime import datetime
+from utils import index_files, setup_logger, processing_message, returning_message, summary_message
 from pathlib import Path
 from rymparser import Rymparser
 
@@ -29,7 +27,7 @@ class Rymporter:
         self.logger = setup_logger("rymporter", Path(__file__).resolve().parents[1])
 
         # Load configuration
-        self.main_dir = config["main_dir"]
+        self.main_dir = Path(config["main_dir"])
         self.field_definitions = config["field_definitions"]
         self.collection_html_file = config["collection_html"]
         self.fields_to_modify = config["fields_to_modify"]
@@ -37,10 +35,7 @@ class Rymporter:
         self.auto_skip = config.get("auto_skip", False)
 
         # Set internal state
-        self.files = index_files(directory=self.main_dir, extension="flac", logger=self.logger)
-        if len(self.files) == 0:
-            self.logger.critical(f"No flac files found in {self.main_dir}.")
-            raise RuntimeError(f"No flac files found in {self.main_dir}.")
+        self.files = []
         self.rym_albums = []
         self._manual_matches = {}
         self._albums_to_skip = []
@@ -53,62 +48,48 @@ class Rymporter:
         Parse the RYM collection HTML and update FLAC files with matched metadata.
         Raises RuntimeError on fatal errors.
         """
-        self.logger.info("Starting Rymparser...")
-        parser = Rymparser()
 
-        self.logger.info("Parsing collection HTML...")
-        try:
-            with open(self.collection_html_file, "r", encoding="utf-8") as f:
-                collection_html = f.read()
-
-            parser.feed(collection_html)
-            self.rym_albums = parser.albums[1:]  # TODO: fix this hacky skip of first album
-
-            if len(self.rym_albums) == 0:
-                self.logger.critical("No albums found in the HTML content.")
-                raise RuntimeError("No albums found in the HTML content.")
-            
-            else:
-                self.logger.info(f"Parsed {len(self.rym_albums)} albums from the HTML content.")
-                log_dir = Path(__file__).resolve().parents[1] / "logs" / datetime.now().strftime('%Y-%m-%d')
-                log_dir.mkdir(exist_ok=True)
-                with open(log_dir / "albums.txt", "w", encoding="utf-8") as f:
-                    self.logger.info(f"Writing parsed albums to {log_dir}/albums.txt for debugging...")
-                    f.write(pformat(self.rym_albums))
-
-        except FileNotFoundError:
-            self.logger.error(f"Collection HTML file '{self.collection_html_file}' not found.")
-            raise
-        except Exception as e:
-            self.logger.error(f"Unexpected error parsing collection HTML: {e}")
-            self.logger.error("Traceback:\n" + traceback.format_exc())
-            raise
-
+        self.rym_albums = self.parse_collection_html()
+        self.files = index_files(directory=self.main_dir, extension="flac", logger=self.logger)
         self.logger.info("Starting RYM album matching process...")
 
-        self._files_processed = 0
-        self._files_modified = 0
         for file in self.files:
             self._files_processed += 1
             self.logger.info(processing_message(self._files_processed, len(self.files), file))
             self.match_album(file)
 
-        self.logger.info(f"\n{'-'*100}\nRymporter summary\n{'-'*100}")
+        self.logger.info(summary_message("Rymporter"))
         self.logger.info(f"Total files processed: {self._files_processed}")
         self.logger.info(("[DRY RUN] " if self.dry_run else "") + f"Total files modified: {self._files_modified}")
-        if len(self._albums_to_skip) > 0:
-            self.logger.warning(
-                f"Unmatched albums skipped: {len(self._albums_to_skip)}\n"
-                f"{'\n'.join(f'  - \"{skipped_album[1]}\" by {skipped_album[0]}' for skipped_album in self._albums_to_skip)}"
-            )
-        if len(self._insufficient_metadata) > 0:
-            self.logger.warning(
-                f"Files with insufficient metadata skipped: {len(self._insufficient_metadata)}\n"
-                f"{'\n'.join(f'  - {file}' for file in self._insufficient_metadata)}"
-            )
-        if len(self._albums_to_skip) == 0 and len(self._insufficient_metadata) == 0:
+        if self._albums_to_skip:
+            self.logger.warning(f"Unmatched albums skipped: {len(self._albums_to_skip)}")
+
+        if self._insufficient_metadata:
+            self.logger.warning(f"Files with insufficient metadata skipped: {len(self._insufficient_metadata)}")
+
+        if not self._albums_to_skip and not self._insufficient_metadata:
             self.logger.info("No issues encountered.")
+
         self.logger.info(returning_message())
+    
+    def parse_collection_html(self):
+        parser = Rymparser()
+        self.logger.info("Parsing collection HTML...")
+        try:
+            with open(self.collection_html_file, "r", encoding="utf-8") as f:
+                collection_html = f.read()
+            parser.feed(collection_html)
+            # TODO: fix this hacky skip of first album
+            if len(parser.albums[1:]) == 0:
+                self.logger.info("No albums found in the HTML content.")
+            else:
+                self.logger.info(f"Parsed {len(self.rym_albums)} albums from the HTML content.")
+            return parser.albums[1:]
+        except FileNotFoundError:
+            self.logger.error(f"Collection HTML file '{self.collection_html_file}' not found.")
+        except Exception as e:
+            self.logger.error(f"Unexpected error parsing collection HTML: {e}")
+            self.logger.error("Traceback:\n" + traceback.format_exc())
 
     def match_album(self, file: Path):
         """
@@ -124,13 +105,13 @@ class Rymporter:
             audio_album_title = audio.get(self.field_definitions["album_title"], [""])[0]
             audio_album_id = audio.get(self.field_definitions["album_id"], [""])[0]
 
-            if (audio_artist, audio_album_title) in self._albums_to_skip:
-                self.logger.debug("Skipping previously skipped album.")
-                return
-
             if not audio_album_id and not (audio_artist and audio_album_title):
                 self.logger.warning("Skipping file due to insufficient metadata.")
                 self._insufficient_metadata.append(file)
+                return
+
+            if (audio_artist, audio_album_title) in self._albums_to_skip:
+                self.logger.debug("Skipping previously skipped album.")
                 return
 
             for i, rym_album in enumerate(self.rym_albums):
