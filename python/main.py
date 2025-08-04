@@ -184,8 +184,8 @@ def main():
 
     try:
         while True:
-            app.refresh()
             print(f"\n{'='*100}\nWelcome back!\n{'='*100}\n\nAvailable scripts:")
+            app.refresh()
             indexed_names = sorted(app.scripts.items())
             for i, (name, info) in enumerate(indexed_names, start=1):
                 description = info.get("doc", "")
