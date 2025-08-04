@@ -93,6 +93,10 @@ def processing_message(current: int, total: int, file: Path) -> str:
     return f"({str(current).zfill(len(str(total)))}/{total}) Processing: {file}"
 
 
+def summary_message(name: str):
+    return f"\n{'-'*100}\n{name} summary\n{'-'*100}"
+
+
 def returning_message():
     return f"\n{'-'*100}\nReturning to main...\n{'-'*100}"
 
