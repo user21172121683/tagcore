@@ -3,7 +3,7 @@ import yaml
 import importlib.util
 from pathlib import Path
 from pprint import pformat
-from utils import setup_logger, clear_caches
+from utils import clear_caches
 import threading
 
 
@@ -20,9 +20,6 @@ class App:
         self.base_dir = Path(__file__).resolve().parent
         self.modules_path = self.base_dir / "modules"
         sys.path.insert(0, str(self.modules_path))
-
-        # Setup logger
-        self.logger = setup_logger("main", self.base_dir)
 
         # Initialise config and scripts
         self.config_path = None
@@ -48,9 +45,9 @@ class App:
             with open(self.config_path, "r") as f:
                 return yaml.safe_load(f) or {}
         except yaml.YAMLError as e:
-            self.logger.error(f"Failed to parse YAML config: {e}")
+            print(f"Failed to parse YAML config: {e}")
         except Exception as e:
-            self.logger.error(f"Failed to load config file: {e}")
+            print(f"Failed to load config file: {e}")
 
         return {}
 
@@ -80,7 +77,7 @@ class App:
                         break
 
             except Exception as e:
-                self.logger.error(f"Failed to load {module_name}: {e}")
+                print(f"Failed to load {module_name}: {e}")
         return scripts
 
     def run_script(self, name: str):
@@ -113,7 +110,7 @@ class App:
                 try:
                     instance.run()
                 except Exception as e:
-                    self.logger.error(f"Error running script '{name}': {e}", exc_info=True)
+                    print(f"Error running script '{name}': {e}", exc_info=True)
                     print(f"An error occurred while running '{name}'. Check the logs for details.")
 
             # Function to listen for 'q'
@@ -144,7 +141,7 @@ class App:
             print("Script finished.")
 
         except Exception as e:
-            self.logger.error(f"Error launching script '{name}': {e}", exc_info=True)
+            print(f"Error launching script '{name}': {e}", exc_info=True)
             print(f"An error occurred while launching '{name}'. Check the logs for details.")
 
     def refresh(self):
@@ -152,7 +149,7 @@ class App:
         Refresh the configuration and script discovery.
         Called each time the main menu is displayed.
         """
-        self.logger.debug("Refreshing configuration and scripts...")
+        print("Refreshing configuration and scripts...")
         self.config_path = self.find_config()
         self.config = self.load_config()
         self.scripts = self.discover_scripts()
