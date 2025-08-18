@@ -1,5 +1,5 @@
 title: lyrics=instrumental (imported)
 script_language_version: '1.1'
 script: |
-  $if($eq_any(%_performance_attributes%,instrumental), $set(UNSYNCEDLYRICS,[Instrumental]))
+  $if($eq_any(%_performance_attributes%,instrumental), $set(LYRICS,[Instrumental]))
 id: e4a62489-fff5-4e77-96df-0237616b636f
