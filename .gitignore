@@ -1,8 +1,8 @@
 .*
 !/.gitignore
+!**/.gitkeep
 *test*
 __*__
-logs/
 *.log
 *.pyc
 *.html
