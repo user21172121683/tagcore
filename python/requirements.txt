@@ -1,3 +1,4 @@
 mutagen
 pillow
 pyyaml
+musicbrainzngs
