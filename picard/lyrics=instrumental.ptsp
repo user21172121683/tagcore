@@ -1,4 +1,4 @@
-title: lyrics=instrumental (imported)
+title: lyrics=instrumental
 script_language_version: '1.1'
 script: |
   $if($eq_any(%_performance_attributes%,instrumental), $set(LYRICS,[Instrumental]))

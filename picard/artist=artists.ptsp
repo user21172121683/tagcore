@@ -1,4 +1,4 @@
-title: artist=artists (imported)
+title: artist=artists
 script_language_version: '1.1'
 script: |
   $setmulti(artist,%artists%)
