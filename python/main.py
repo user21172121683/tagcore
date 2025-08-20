@@ -103,6 +103,7 @@ class App:
             # Function to run the script
             def script_target():
                 try:
+                    print("Script is running. Type 'q' then press Enter to stop it.")
                     instance.run()
                 except Exception as e:
                     print(f"Error running script '{name}': {e}", exc_info=True)
@@ -124,16 +125,13 @@ class App:
             script_thread.start()
             listener_thread.start()
 
-            print("Script is running. Type 'q' then press Enter to stop it.")
-
             # Wait for the script to finish
             script_thread.join()
 
             # Ensure listener thread stops too
             stop_flag.set()
+            print("Press Enter to return to main menu.")
             listener_thread.join()
-
-            print("Script finished.")
 
         except Exception as e:
             print(f"Error launching script '{name}': {e}", exc_info=True)
