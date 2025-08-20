@@ -101,6 +101,10 @@ def returning_message():
     return f"\n{'-'*100}\nReturning to main...\n{'-'*100}"
 
 
+def dry_run_message(dry_run: bool, message: str) -> str:
+    return f"[DRY RUN] {message}" if dry_run else message
+
+
 def check_stop(stop_flag: Event, logger: logging.Logger):
     """
     Checks whether the stop_flag is set.
