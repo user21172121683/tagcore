@@ -32,8 +32,8 @@ class Ogger:
         self.ogg_metadata_index = {}
 
         # Stats
-        self._unmatched_ogg_paths = set()
-        self._matched_ogg_paths = set()
+        self._unmatched_ogg_files = set()
+        self._matched_ogg_files = set()
         self._flac_files_processed = []
         self._ogg_files_converted = []
         self._ogg_files_renamed = []
@@ -62,7 +62,7 @@ class Ogger:
         self.ogg_metadata_index = self._build_metadata_index(self.ogg_files)
 
         # Initialise set for unmatched ogg files
-        self._unmatched_ogg_paths = set(self.ogg_files)
+        self._unmatched_ogg_files = set(self.ogg_files)
 
         # Process each FLAC file and match with OGG files
         for flac_file in self.flac_files:
@@ -165,7 +165,7 @@ class Ogger:
         # Match by track ID field if specified
         self.logger.debug("Matching by metadata...")
         for ogg_file, (ogg_fingerprint, ogg_track_id) in self.ogg_metadata_index.items():
-            if ogg_file in self._unmatched_ogg_paths:
+            if ogg_file in self._unmatched_ogg_files:
                 if self.track_id_field and self.flac_metadata_index[flac_file][1] and ogg_track_id and self.flac_metadata_index[flac_file][1] == ogg_track_id:
                     self.logger.info(f"Track ID match: {ogg_file}")
                     match = ogg_file
@@ -179,7 +179,7 @@ class Ogger:
         if self.filename_match and not match:
             self.logger.debug(f"Matching by filename...")
             for ogg_file in self.ogg_files:
-                if ogg_file in self._unmatched_ogg_paths:
+                if ogg_file in self._unmatched_ogg_files:
                     if flac_file.relative_to(self.flac_dir).with_suffix('') == ogg_file.relative_to(self.ogg_dir).with_suffix(""):
                         self.logger.info(f"Filename match: {ogg_file}")
                         match = ogg_file
@@ -188,8 +188,8 @@ class Ogger:
         if not match:
             self.logger.info(f"No match found!")
         else:
-            self._unmatched_ogg_paths.remove(match)
-            self._matched_ogg_paths.add(match)
+            self._unmatched_ogg_files.remove(match)
+            self._matched_ogg_files.add(match)
 
         return match
 
