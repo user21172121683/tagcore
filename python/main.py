@@ -85,16 +85,11 @@ class App:
             print(f"Script '{name}' not found.")
             return
 
-        if name not in self.config:
-            print(f"No config found for '{name}' in {self.config_path}")
-            return
-
         try:
             cls = self.scripts[name]["class"]
 
-            script_args = self.config[name].copy()
-            for key, value in self.config['General'].items():
-                script_args[key] = value
+            script_args = self.config.get('General', {}).copy()
+            script_args.update(self.config.get(name, {}))
 
             answer = input(f"{pformat(script_args, indent=2, width=80, sort_dicts=True)}\nRun {name} with the above config? (Y/n): ").strip().lower()
             if answer not in ("", "y", "yes"):
