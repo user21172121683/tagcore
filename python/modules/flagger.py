@@ -5,6 +5,7 @@ from mutagen.flac import FLAC
 from utils import index_files, setup_logger, processing_message, returning_message, check_stop
 from pathlib import Path
 from threading import Event
+from datetime import datetime
 
 
 class Flagger:
@@ -23,6 +24,7 @@ class Flagger:
         self.main_dir = Path(config['main_dir'])
         self.tags_to_check = config['tags_to_check']
         self.problems_field = config.get('problems_field', 'PROBLEMS')
+        self.timestamp = config.get('timestamp', True)
         self.cover_target_size = tuple(config.get('cover_target_size', [1000, 1000]))
         self.cover_allowed_formats = config.get('cover_allowed_formats', ['jpg', 'jpeg'])
         self.cover_auto_resize = config.get('cover_auto_resize', False)
@@ -65,6 +67,8 @@ class Flagger:
                 else:
                     if not self.dry_run:
                         audio[self.problems_field] = problems
+                        if self.timestamp:
+                            audio[f"{self.problems_field}_LASTCHECKED"] = datetime.now().strftime('%Y-%m-%d')
                         audio.save()
                         self.logger.info(f"Problems saved to {self.problems_field}.")
                     else:

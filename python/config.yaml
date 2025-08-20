@@ -39,6 +39,7 @@ Rymporter:
 Flagger:
   skip_integrity_check: false
   problems_field: PROBLEMS
+  timestamp: true
   cover_target_size: [1000, 1000]
   cover_auto_resize: false
   cover_auto_reformat: false
