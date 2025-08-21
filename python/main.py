@@ -92,13 +92,15 @@ class App:
             script_args = self.config.get('General', {}).copy()
             script_args.update(self.config.get(name, {}))
 
+            script_args_str = pformat(script_args, indent=2, width=80, sort_dicts=True)
+
             if confirm:
-                answer = input(f"{pformat(script_args, indent=2, width=80, sort_dicts=True)}\nRun {name} with the above config? (Y/n): ").strip().lower()
+                answer = input(f"{script_args_str}\nRun {name} with the above config? (Y/n): ").strip().lower()
                 if answer not in ("", "y", "yes"):
                     print("Aborting script run.")
                     return
             else:
-                print(f"\nRunning {name} with config:\n{pformat(script_args, indent=2, width=80, sort_dicts=True)}")
+                print(f"\nRunning {name} with config:\n{script_args_str}")
 
             stop_flag = threading.Event()
             script_args['stop_flag'] = stop_flag
