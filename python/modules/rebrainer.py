@@ -1,5 +1,5 @@
 import musicbrainzngs
-from utils import index_files, setup_logger, processing_message, returning_message, check_stop
+from utils import *
 from pathlib import Path
 from mutagen.flac import FLAC
 from getpass import getpass
