@@ -109,10 +109,8 @@ class Ogger:
             self._clean()
 
         # Final summary
-        self.logger.info(summary_message(name="Ogger", elapsed=time.time() - self.start_time))
-
         summary_items = [
-            (self._flac_files_processed, "Processed {} FLAC files"),
+            (self._flac_files_processed, "Processed {} FLAC files."),
             (self._ogg_files_converted, "Converted {} FLAC files to OGG."),
             (self._ogg_files_modified, "Modified metadata for {} OGG files."),
             (self._ogg_files_renamed, "Renamed {} OGG files."),
@@ -120,14 +118,14 @@ class Ogger:
             (self._directories_deleted, "Deleted {} empty directories."),
         ]
 
-        if not any(items for items, _ in summary_items):
-            self.logger.info("Nothing done!")
-        else:
-            for items, message in summary_items:
-                if items:
-                    self.logger.info(dry_run_message(self.dry_run, message.format(len(items))))
-
-        self.logger.info(returning_message())
+        self.logger.info(
+            summary_message(
+                name="Ogger",
+                summary_items=summary_items,
+                dry_run=self.dry_run,
+                elapsed=time.time() - self.start_time
+            )
+        )
 
     def _build_metadata_index(self, files: list[Path]) -> dict:
         self.logger.info("Building metadata index with hashed fingerprints...")
@@ -171,7 +169,7 @@ class Ogger:
                         self.logger.error(f"Failed to delete corrupt file {file}: {delete_error}")
                 self.logger.info(dry_run_message(self.dry_run, f"Deleted corrupt audio file: {file}"))
                 files.remove(file)
-        
+
         return index
 
     def _generate_fingerprint(self, tags: dict) -> str:
