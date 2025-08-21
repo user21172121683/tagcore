@@ -31,8 +31,22 @@ def index_files(
 def setup_logger(
     name: str,
     base_dir: Path,
-    level=logging.DEBUG
+    level: int =logging.DEBUG,
+    console_level: str = "INFO",
+    file_level: str = "DEBUG"
 ) -> logging.Logger:
+    # Helper to convert string level to logging constant
+    def get_level(level_str: str) -> int:
+        level_str = level_str.upper()
+        levels = {
+            'DEBUG': logging.DEBUG,
+            'INFO': logging.INFO,
+            'WARNING': logging.WARNING,
+            'ERROR': logging.ERROR,
+            'CRITICAL': logging.CRITICAL,
+        }
+        return levels.get(level_str, logging.INFO)  # Default INFO if invalid
+
     # Colorful console formatter
     class ColorFormatter(logging.Formatter):
         COLORS = {
@@ -70,13 +84,13 @@ def setup_logger(
 
     # Console handler
     console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(logging.DEBUG)
+    console_handler.setLevel(get_level(console_level))
     console_formatter = ColorFormatter("[%(levelname)s] %(message)s")
     console_handler.setFormatter(console_formatter)
 
     # File handler (the log file now has a timestamp in its name)
     file_handler = logging.FileHandler(log_file)
-    file_handler.setLevel(logging.DEBUG)
+    file_handler.setLevel(get_level(file_level))
     file_formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
     file_handler.setFormatter(file_formatter)
 

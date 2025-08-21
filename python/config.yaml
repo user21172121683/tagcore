@@ -1,6 +1,8 @@
 General:
   dry_run: false
   main_dir: flac
+  console_level: DEBUG
+  file_level: DEBUG
 
 Rymporter:
   auto_skip: false
