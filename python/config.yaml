@@ -71,6 +71,22 @@ Ogger:
   quality: 4
   sample_rate: 44100
   channels: 2
+  fields_to_copy:
+    - ALBUM
+    - ALBUMARTIST
+    - ARTIST
+    - DISCNUMBER
+    - DISCTOTAL
+    - GENRE
+    - REPLAYGAIN_ALBUM_GAIN
+    - REPLAYGAIN_ALBUM_PEAK
+    - REPLAYGAIN_TRACK_GAIN
+    - REPLAYGAIN_TRACK_PEAK
+    - TITLE
+    - TRACK
+    - TRACKTOTAL
+    - YEAR
+    - LYRICS
 
 ReBrainer:
   username: user21172121683

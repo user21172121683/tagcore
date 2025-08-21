@@ -4,6 +4,7 @@ from datetime import datetime
 from pathlib import Path
 from threading import Event
 import shutil
+from datetime import timedelta
 
 
 def index_files(
@@ -89,15 +90,15 @@ def setup_logger(
     return logger
 
 
-def processing_message(current: int, total: int, file: Path) -> str:
-    return f"({str(current).zfill(len(str(total)))}/{total}) Processing: {file}"
+def processing_message(current: int, total: int, file: Path, elapsed: float | None = None) -> str:
+    return f"[{current}/{total}{f' | {str(timedelta(seconds=elapsed))[:-3]}' if elapsed else ''}] Processing: {file}"
 
 
-def summary_message(name: str):
-    return f"\n{'-'*100}\n{name} summary\n{'-'*100}"
+def summary_message(name: str, elapsed: float | None = None) -> str:
+    return f"\n{'-'*100}\n{f'[{str(timedelta(seconds=elapsed))[:-3]}] ' if elapsed else ''}{name} summary\n{'-'*100}"
 
 
-def returning_message():
+def returning_message() -> str:
     return f"\n{'-'*100}\nReturning to main...\n{'-'*100}"
 
 
@@ -105,7 +106,7 @@ def dry_run_message(dry_run: bool, message: str) -> str:
     return f"[DRY RUN] {message}" if dry_run else message
 
 
-def check_stop(stop_flag: Event, logger: logging.Logger):
+def check_stop(stop_flag: Event, logger: logging.Logger) -> bool:
     """
     Checks whether the stop_flag is set.
     If set, logs a message and returns True.
