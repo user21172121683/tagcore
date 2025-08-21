@@ -108,12 +108,29 @@ def processing_message(current: int, total: int, file: Path, elapsed: float | No
     return f"[{current}/{total}{f' | {str(timedelta(seconds=elapsed))[:-3]}' if elapsed else ''}] Processing: {file}"
 
 
-def summary_message(name: str, elapsed: float | None = None) -> str:
-    return f"\n{'-'*100}\n{f'[{str(timedelta(seconds=elapsed))[:-3]}] ' if elapsed else ''}{name} summary\n{'-'*100}"
+def summary_message(name: str, summary_items: list[tuple[list, str]], dry_run: bool, elapsed: float | None = None) -> str:
+    # Initialise with banner
+    message = banner_message(f"{name} summary")
+
+    # Table to summarise
+    if not any(items for items, _ in summary_items):
+        message = message + "\nNothing done!"
+    else:
+        for items, message in summary_items:
+            if items:
+                message = message + "\n" + dry_run_message(dry_run, message.format(len(items)))
+    
+    # Total time elapsed
+    if elapsed:
+        message = message + f"\nTotal time elapsed: {str(timedelta(seconds=elapsed))[:-3]}"
+    
+    # Returning to main
+    message = message + banner_message("Returning...")
+    return message
 
 
-def returning_message() -> str:
-    return f"\n{'-'*100}\nReturning to main...\n{'-'*100}"
+def banner_message(message: str, symbol: str = "-", length: int = 100):
+    return f"\n{symbol*length}\n{message}\n{symbol*length}"
 
 
 def dry_run_message(dry_run: bool, message: str) -> str:
