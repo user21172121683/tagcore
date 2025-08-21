@@ -17,7 +17,7 @@ class Flagger:
         # Setup logger
         self.logger = setup_logger(
             name="flagger",
-            base_dir=Path(__file__).resolve().parents[1],
+            base_dir=Path(__file__).resolve().parents[2],
             console_level=config.get('console_level'),
             file_level=config.get('file_level')
         )

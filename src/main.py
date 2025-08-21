@@ -29,13 +29,13 @@ class App:
 
     def find_config(self) -> Path:
         """
-        Find the config.yaml file in the base directory.
+        Find the config.yaml file in the parent directory of the script.
         Raises FileNotFoundError if not found.
         """
-        config_path = self.base_dir / "config.yaml"
+        config_path = self.base_dir.parent / "config.yaml"
         if config_path.is_file():
             return config_path
-        raise FileNotFoundError("config.yaml not found in the same directory as main.py.")
+        raise FileNotFoundError("config.yaml not found in the parent directory of main.py.")
 
     def load_config(self) -> dict:
         """

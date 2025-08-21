@@ -1,8 +1,9 @@
 from mutagen.flac import FLAC
 import traceback
-from utils import index_files, setup_logger, processing_message, returning_message, summary_message
+from utils import *
 from pathlib import Path
 from rymparser import Rymparser
+import time
 
 
 class Rymporter:
@@ -11,80 +12,99 @@ class Rymporter:
     """
 
     def __init__(self, **config):
-        """
-        Initialize Rymporter with configuration parameters.
-
-        Args:
-            config (dict): Configuration dictionary with keys:
-                - main_dir (str): Directory containing FLAC files.
-                - field_definitions (dict): Mapping of tag keys to metadata field names.
-                - collection_html (str): Path to the RYM collection HTML file.
-                - fields_to_modify (dict): Fields that should be updated.
-                - dry_run (bool): If True, do not save changes.
-                - auto_skip (bool): If True, skip unmatched albums without prompt.
-        """
         # Setup logger
-        self.logger = setup_logger("rymporter", Path(__file__).resolve().parents[1])
+        self.logger = setup_logger(
+            name="rymporter",
+            base_dir=Path(__file__).resolve().parents[2],
+            console_level=config.get("console_level"),
+            file_level=config.get("file_level")
+        )
+
+        # Stop flag
+        self.stop_flag = config.get("stop_flag")
 
         # Load configuration
         self.main_dir = Path(config["main_dir"])
         self.field_definitions = config["field_definitions"]
-        self.collection_html_file = config["collection_html"]
+        self.collection_html_file = Path(__file__).resolve().parents[2] / "data" / config.get("collection_html")
         self.fields_to_modify = config["fields_to_modify"]
         self.dry_run = config.get("dry_run", True)
         self.auto_skip = config.get("auto_skip", False)
 
-        # Set internal state
+        # Initialise indices
         self.files = []
         self.rym_albums = []
+
+        # Stats
+        self._files_processed = []
         self._manual_matches = {}
         self._albums_to_skip = []
-        self._insufficient_metadata = []
-        self._files_processed = 0
+        self._files_insufficient_metadata = []
         self._files_modified = []
+        self.start_time = float
 
     def run(self):
         """
         Parse the RYM collection HTML and update FLAC files with matched metadata.
         Raises RuntimeError on fatal errors.
         """
+        # Start timer
+        self.start_time = time.time()
 
+        # Build indices
         self.rym_albums = self.parse_collection_html()
         self.files = index_files(directory=self.main_dir, extension="flac", logger=self.logger)
-        self.logger.info("Starting RYM album matching process...")
 
+        # Try to find a match for each FLAC file
         for file in self.files:
-            self._files_processed += 1
-            self.logger.info(processing_message(self._files_processed, len(self.files), file))
+            if check_stop(self.stop_flag, self.logger):
+                break
+            self._files_processed.append(file)
+            self.logger.info(
+                processing_message(
+                    current=len(self._files_processed),
+                    total=len(self.files),
+                    file=file,
+                    elapsed=time.time() - self.start_time
+                )
+            )
             self.match_album(file)
 
-        self.logger.info(summary_message("Rymporter"))
-        self.logger.info(f"Total files processed: {self._files_processed}")
-        self.logger.info(("[DRY RUN] " if self.dry_run else "") + f"Total files modified: {len(self._files_modified)}")
-        if self._albums_to_skip:
-            self.logger.warning(f"Unmatched albums skipped: {len(self._albums_to_skip)}")
+        # Final summary
+        summary_items = [
+            (self._files_processed, "Processed {} FLAC files."),
+            (self._files_modified, "Modified {} FLAC files."),
+            (self._albums_to_skip, "Skipped {} unmatched albums."),
+            (self._files_insufficient_metadata, "Skipped {} FLAC files with insufficient metadata.")
+        ]
 
-        if self._insufficient_metadata:
-            self.logger.warning(f"Files with insufficient metadata skipped: {len(self._insufficient_metadata)}")
+        self.logger.info(
+            summary_message(
+                name="Rymporter",
+                summary_items=summary_items,
+                dry_run=self.dry_run,
+                elapsed=time.time() - self.start_time
+            )
+        )
 
-        if not self._albums_to_skip and not self._insufficient_metadata:
-            self.logger.info("No issues encountered.")
-
-        self.logger.info(returning_message())
-    
     def parse_collection_html(self):
         parser = Rymparser()
-        self.logger.info("Parsing collection HTML...")
+        self.logger.info(f"Parsing collection HTML in {self.collection_html_file}...")
         try:
-            with open(self.collection_html_file, "r", encoding="utf-8") as f:
+            with self.collection_html_file.open("r", encoding="utf-8") as f:
                 collection_html = f.read()
             parser.feed(collection_html)
-            # TODO: fix this hacky skip of first album
-            if len(parser.albums[1:]) == 0:
+
+            # TODO: fix this hacky way to skip the first album
+            albums = parser.albums[1:]
+
+            if not albums:
                 self.logger.info("No albums found in the HTML content.")
             else:
-                self.logger.info(f"Parsed {len(self.rym_albums)} albums from the HTML content.")
-            return parser.albums[1:]
+                self.logger.info(f"Parsed {len(albums)} albums from the HTML content.")
+
+            return albums
+
         except FileNotFoundError:
             self.logger.error(f"Collection HTML file '{self.collection_html_file}' not found.")
         except Exception as e:
@@ -92,12 +112,6 @@ class Rymporter:
             self.logger.error("Traceback:\n" + traceback.format_exc())
 
     def match_album(self, file: Path):
-        """
-        Attempt to match a FLAC file's metadata with RYM album data and update metadata if matched.
-
-        Args:
-            file (Path): Path to the FLAC file.
-        """
         matched = False
         try:
             audio = FLAC(file)
@@ -105,20 +119,24 @@ class Rymporter:
             audio_album_title = audio.get(self.field_definitions["album_title"], [""])[0]
             audio_album_id = audio.get(self.field_definitions["album_id"], [""])[0]
 
+            # Check if file has sufficient metadata for matching
             if not audio_album_id and not (audio_artist and audio_album_title):
                 self.logger.warning("Skipping file due to insufficient metadata.")
-                self._insufficient_metadata.append(file)
+                self._files_insufficient_metadata.append(file)
                 return
 
+            # Check if album has been skipped beforehand
             if (audio_artist, audio_album_title) in self._albums_to_skip:
                 self.logger.debug("Skipping previously skipped album.")
                 return
 
+            # Loop through all RYM albums
             for i, rym_album in enumerate(self.rym_albums):
                 rym_album_id = rym_album["album"]["album_id"]
                 rym_album_title = rym_album["album"]["album_title"]
                 rym_artist = rym_album["artist"][0]["artist_name"]
 
+                # String for match message
                 rym_album_str = (
                     f'{rym_album_id} "{rym_album_title.strip('"')}" by '
                     f'{", ".join(artist.get("artist_name", "") for artist in rym_album.get("artist", []))} '
@@ -132,7 +150,7 @@ class Rymporter:
                     self._update_album(rym_album, audio, file)
                     break
 
-                # Match by normalized artist and album title
+                # Match by normalised artist and album title
                 if rym_artist == audio_artist and rym_album_title == audio_album_title:
                     self.logger.debug(f"Matched via artist-title: {rym_album_str}")
                     matched = True
@@ -178,14 +196,7 @@ class Rymporter:
             self.logger.error("Traceback:\n" + traceback.format_exc())
 
     def _update_album(self, rym_album: dict, audio: FLAC, file: Path):
-        """
-        Update the FLAC file metadata with data from a matched RYM album.
-
-        Args:
-            rym_album (dict): Matched album data from RYM.
-            audio (FLAC): Mutagen FLAC object for the file.
-        """
-        self.logger.debug("Updating file with RYM data...")
+        self.logger.debug("Checking if tags need to be updated...")
         new_metadata = self._build_new_metadata_dict(rym_album)
 
         modified = False
@@ -193,35 +204,24 @@ class Rymporter:
             # Use uppercase field names consistently
             current_values = audio.get(field_name.upper(), [])
             if self._should_update_field(current_values, new_values):
-                self.logger.debug(f"  {field_name.upper()} = {', '.join(map(str, new_values))}")
+                self.logger.debug(f"{field_name.upper()} = {', '.join(map(str, new_values))}")
                 audio[field_name.upper()] = new_values
                 modified = True
                 self._files_modified.append(file)
             else:
-                self.logger.debug(f"  {field_name.upper()} is unchanged. Skipping update.")
+                self.logger.debug(f"{field_name.upper()} is unchanged. Skipping update.")
 
         if modified:
             if not self.dry_run:
                 try:
                     audio.save()
-                    self.logger.info("File successfully updated with RYM data.")
+                    self.logger.info(dry_run_message("File successfully updated with RYM data."))
                 except Exception as e:
                     self.logger.error(f"Error saving file: {e}")
-            else:
-                self.logger.info("[DRY RUN] Changes detected but not saved.")
         else:
-            self.logger.debug("No changes detected. File remains unmodified.")
+            self.logger.info("No changes detected.")
 
     def _build_new_metadata_dict(self, rym_album: dict) -> dict:
-        """
-        Build a dictionary of tag field names and their new values from RYM album data.
-
-        Args:
-            rym_album (dict): Album data from RYM.
-
-        Returns:
-            dict: Mapping of metadata field names (uppercase) to list of values.
-        """
         temp_values = {
             self.field_definitions[tag].upper(): []
             for tag in self.fields_to_modify
@@ -256,16 +256,6 @@ class Rymporter:
         return temp_values
 
     def _should_update_field(self, current_values: list, new_values: list) -> bool:
-        """
-        Determine if a metadata field should be updated by comparing current and new values.
-
-        Args:
-            current_values (list): Current metadata values.
-            new_values (list): New metadata values.
-
-        Returns:
-            bool: True if values differ, False otherwise.
-        """
         current_values_str = [str(v) for v in current_values]
         new_values_str = [str(v) for v in new_values]
         return current_values_str != new_values_str

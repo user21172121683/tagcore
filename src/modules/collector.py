@@ -9,8 +9,12 @@ class Collector:
     """
 
     def __init__(self, **config):
-        self.base_dir = Path(__file__).resolve().parents[1]
-        self.logger = setup_logger("collector", self.base_dir)
+        self.logger = setup_logger(
+            name="collector",
+            base_dir=Path(__file__).resolve().parents[2],
+            console_level=config.get('console_level'),
+            file_level=config.get('file_level')
+        )
         self.username = config.get('username', None)
 
     def run(self):
