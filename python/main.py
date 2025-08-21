@@ -5,6 +5,7 @@ from pathlib import Path
 from pprint import pformat
 import threading
 import shutil
+import argparse
 
 
 class App:
@@ -80,7 +81,7 @@ class App:
                 print(f"Failed to load {module_name}: {e}")
         return scripts
 
-    def run_script(self, name: str):
+    def run_script(self, name: str, confirm: bool = True):
         if name not in self.scripts:
             print(f"Script '{name}' not found.")
             return
@@ -91,10 +92,13 @@ class App:
             script_args = self.config.get('General', {}).copy()
             script_args.update(self.config.get(name, {}))
 
-            answer = input(f"{pformat(script_args, indent=2, width=80, sort_dicts=True)}\nRun {name} with the above config? (Y/n): ").strip().lower()
-            if answer not in ("", "y", "yes"):
-                print("Aborting script run.")
-                return
+            if confirm:
+                answer = input(f"{pformat(script_args, indent=2, width=80, sort_dicts=True)}\nRun {name} with the above config? (Y/n): ").strip().lower()
+                if answer not in ("", "y", "yes"):
+                    print("Aborting script run.")
+                    return
+            else:
+                print(f"\nRunning {name} with config:\n{pformat(script_args, indent=2, width=80, sort_dicts=True)}")
 
             stop_flag = threading.Event()
             script_args['stop_flag'] = stop_flag
@@ -173,37 +177,68 @@ class App:
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Script Runner")
+    parser.add_argument(
+        'scripts_to_run', 
+        nargs='*', 
+        help='Names of scripts to run automatically (by class name)'
+    )
+
+    args = parser.parse_args()
     app = App()
 
+    def get_script_name_case_insensitive(user_input):
+        lower_input = user_input.lower()
+        for name in app.scripts:
+            if name.lower() == lower_input:
+                return name
+        return None
+
     try:
-        while True:
-            print(f"\n{'='*100}\nWelcome back!\n{'='*100}\n\nAvailable scripts:")
-            app.refresh()
-            indexed_names = sorted(app.scripts.items())
-            for i, (name, info) in enumerate(indexed_names, start=1):
-                description = info.get("doc", "")
-                display_name = info['class_name']
-                if description:
-                    display_name += f": {description}"
-                print(f"  [{i}] {display_name}")
-
-            script_input = input("\nEnter script number or class name (or press Enter to quit): ").strip()
-
-            if not script_input:
-                break
-
-            # Try interpreting the input as a number
-            if script_input.isdigit():
-                idx = int(script_input) - 1
-                if 0 <= idx < len(indexed_names):
-                    script_name = indexed_names[idx][0]
+        app.refresh()
+        if args.scripts_to_run:
+            for script_name_input in args.scripts_to_run:
+                matched_name = get_script_name_case_insensitive(script_name_input)
+                if matched_name:
+                    print(f"\nAuto-running script: {matched_name}")
+                    app.run_script(matched_name, confirm=False)
                 else:
-                    print("Invalid number.")
-                    continue
-            else:
-                script_name = script_input
-            app.refresh()
-            app.run_script(script_name)
+                    print(f"Script '{script_name_input}' not found.")
+        else:
+            # Interactive menu
+            while True:
+                print(f"\n{'='*100}\nWelcome back!\n{'='*100}\n\nAvailable scripts:")
+                app.refresh()
+                indexed_names = sorted(app.scripts.items())
+                for i, (name, info) in enumerate(indexed_names, start=1):
+                    description = info.get("doc", "")
+                    display_name = info['class_name']
+                    if description:
+                        display_name += f": {description}"
+                    print(f"  [{i}] {display_name}")
+
+                script_input = input("\nEnter script number or class name (or press Enter to quit): ").strip()
+
+                if not script_input:
+                    break
+
+                # Try interpreting the input as a number
+                if script_input.isdigit():
+                    idx = int(script_input) - 1
+                    if 0 <= idx < len(indexed_names):
+                        script_name = indexed_names[idx][0]
+                    else:
+                        print("Invalid number.")
+                        continue
+                else:
+                    # Match class name case-insensitively
+                    script_name = get_script_name_case_insensitive(script_input)
+                    if not script_name:
+                        print(f"Script '{script_input}' not found.")
+                        continue
+
+                app.refresh()
+                app.run_script(script_name)
     finally:
         # Ensure caches are cleared before quitting
         app.clear_caches()
