@@ -114,18 +114,18 @@ def summary_message(name: str, summary_items: list[tuple[list, str]], dry_run: b
 
     # Table to summarise
     if not any(items for items, _ in summary_items):
-        message = message + "\nNothing done!"
+        message += "\nNothing done!"
     else:
-        for items, message in summary_items:
+        for items, msg_template in summary_items:
             if items:
-                message = message + "\n" + dry_run_message(dry_run, message.format(len(items)))
+                message += "\n" + dry_run_message(dry_run, msg_template.format(len(items)))
     
     # Total time elapsed
     if elapsed:
-        message = message + f"\nTotal time elapsed: {str(timedelta(seconds=elapsed))[:-3]}"
+        message += f"\nTotal time elapsed: {str(timedelta(seconds=elapsed))[:-3]}"
     
     # Returning to main
-    message = message + banner_message("Returning...")
+    message += banner_message("Returning...")
     return message
 
 
