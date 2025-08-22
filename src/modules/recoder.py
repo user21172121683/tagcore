@@ -113,62 +113,54 @@ class ReCoder:
 
     def _encode(self, file: Path, audio: FLAC):
         temp_wav = file.with_suffix('.wav')
-        output_file = file.with_name(f"{file.stem}_temp.flac")
+        output_file = file.with_suffix('.flac.temp')
+        backup_file = file.with_suffix('.flac.bak')
 
         try:
+            # Backup the original file before modifying
+            file.replace(backup_file)
+
             # Decode FLAC to WAV
-            self.logger.debug(f"Decoding to WAV...")
-            decode_cmd = [
-                'flac',
-                '-d',
-                '-f', str(file),
-                '-o', str(temp_wav),
-                '-s'
-            ]
+            self.logger.debug("Decoding to WAV...")
+            decode_cmd = ['flac', '-d', '-f', str(backup_file), '-o', str(temp_wav), '-s']
             subprocess.run(decode_cmd, check=True)
 
-            # Re-encode WAV to FLAC with desired compression level
+            # Re-encode WAV to FLAC
             self.logger.debug(f"Re-encoding to compression level {self.level}...")
-            encode_cmd = [
-                'flac',
-                f'-{self.level}',
-                '-f', str(temp_wav),
-                '-o', str(output_file),
-                '-s'
-            ]
+            encode_cmd = ['flac', f'-{self.level}', '-f', str(temp_wav), '-o', str(output_file), '-s']
             subprocess.run(encode_cmd, check=True)
 
-            # Copy original metadata
+            # Copy metadata from original audio
             reencoded_audio = FLAC(output_file)
-            # Clear existing tags and pictures
-            for key in list(reencoded_audio.keys()):
-                reencoded_audio.pop(key)
-            reencoded_audio.clear_pictures()
-
-            # Copy tags and pictures from original
+            reencoded_audio.clear()
             for key in audio.keys():
                 reencoded_audio[key] = audio[key]
-
             for picture in audio.pictures:
                 reencoded_audio.add_picture(picture)
 
-            # Optionally stamp the file to mark compression level
+            # Optionally add stamp
             if self.stamp:
                 reencoded_audio[self.stamp] = [str(self.level)]
                 self.logger.debug(dry_run_message(self.dry_run, "Applied level stamp."))
 
             reencoded_audio.save()
 
-            # Replace original file atomically
+            # Replace original with re-encoded version
             output_file.replace(file)
+            self.logger.info("Re-encoded and replaced!")
 
             self._files_encoded.append(file)
-            self.logger.info(f"Re-encoded and replaced!")
+
+            # Cleanup backup after success
+            if backup_file.exists():
+                backup_file.unlink()
 
         except subprocess.CalledProcessError as e:
             self.logger.error(f"Subprocess failed: {e}")
+            self._rollback(file, backup_file)
         except Exception as e:
             self.logger.error(f"Encoding failed for {file.name}: {e}")
+            self._rollback(file, backup_file)
         finally:
             if temp_wav.exists():
                 try:
@@ -176,3 +168,12 @@ class ReCoder:
                     self.logger.debug("Temporary WAV file removed.")
                 except Exception as e:
                     self.logger.warning(f"Failed to remove temporary WAV file: {e}")
+
+    def _rollback(self, file: Path, backup_file: Path):
+        """Restore original file from backup if rollback is needed."""
+        if backup_file.exists():
+            try:
+                backup_file.replace(file)
+                self.logger.info(f"Rolled back to original file: {file.name}")
+            except Exception as e:
+                self.logger.error(f"Failed to restore original file from backup: {e}")
