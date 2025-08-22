@@ -135,9 +135,10 @@ Checks if files with MusicBrainz IDs can be updated with fresh metadata via the 
 
 Re-encodes FLAC files to a new compression level.
 
-**TODO:**
+**Configurable Parameters:**
 
-- Implement the whole thing.
+- `level`: The FLAC compression level (0-8).
+- `stamp`: The Vorbis comment field to record the encoding level (e.g., `ENCODE_LEVEL`). This is also used to skip unnecessary processing.
 
 ### ReGainer
 

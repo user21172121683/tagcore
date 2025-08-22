@@ -163,3 +163,7 @@ ReBrainer:
     - series-rels
     - work-rels
     - instrument-rels
+
+ReCoder:
+  level: 8
+  stamp: ENCODE_LEVEL
