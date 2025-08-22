@@ -1,5 +1,0 @@
-title: releasedate=date
-script_language_version: '1.1'
-script: |
-  $set(releasedate,%date%)
-id: 6c12555e-f507-4db4-866a-dad008d5fb4f
