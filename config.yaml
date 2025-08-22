@@ -68,7 +68,7 @@ Ogger:
   quality: 4
   sample_rate: 44100
   channels: 2
-  fields_to_copy:
+  fields_to_preserve:
     - ALBUM
     - ALBUMARTIST
     - ARTIST
