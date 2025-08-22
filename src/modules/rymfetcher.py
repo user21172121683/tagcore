@@ -3,14 +3,14 @@ from pathlib import Path
 from utils import setup_logger, banner_message
 
 
-class Collector:
+class Rymfetcher:
     """
     Opens RYM album collection in a web browser.
     """
 
     def __init__(self, **config):
         self.logger = setup_logger(
-            name="collector",
+            name="rymfetcher",
             base_dir=Path(__file__).resolve().parents[2],
             console_level=config.get('console_level'),
             file_level=config.get('file_level')

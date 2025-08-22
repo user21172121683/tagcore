@@ -1,6 +1,7 @@
 General:
   dry_run: false
   main_dir: flac
+  username: user21172121683
   console_level: DEBUG
   file_level: DEBUG
 
@@ -60,9 +61,6 @@ Flagger:
     - REPLAYGAIN_ALBUM_GAIN
     - REPLAYGAIN_TRACK_GAIN
 
-Collector:
-  username: user21172121683
-
 Ogger:
   ogg_dir: ogg
   track_id_field: MUSICBRAINZ_RELEASETRACKID
@@ -94,7 +92,6 @@ Ogger:
     - LYRICS
 
 ReBrainer:
-  username: user21172121683
   field_map:
     ALBUM: release.release-group.title
     ALBUMARTIST: release.release-group.artist-credit.artist.name
@@ -164,6 +161,5 @@ ReBrainer:
     - release-rels
     - release-group-rels
     - series-rels
-    - url-rels
     - work-rels
     - instrument-rels
