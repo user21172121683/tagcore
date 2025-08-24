@@ -1,5 +1,6 @@
 import sys
 import yaml
+import ast
 import importlib.util
 from pathlib import Path
 from pprint import pformat
@@ -49,15 +50,48 @@ class App:
             print(f"Failed to parse YAML config: {e}")
         except Exception as e:
             print(f"Failed to load config file: {e}")
-
         return {}
 
+    def parse_overrides(self, override_list):
+        """
+        Converts ['Section.key.sub=value'] into nested dict overrides with type conversion.
+        """
+        overrides = {}
+        for item in override_list:
+            if '=' not in item:
+                print(f"Invalid override format (missing '='): {item}")
+                continue
+
+            key_path, value_str = item.split('=', 1)
+            keys = key_path.split('.')
+
+            try:
+                value = ast.literal_eval(value_str)
+            except (ValueError, SyntaxError):
+                value = value_str
+
+            current = overrides
+            for key in keys[:-1]:
+                current = current.setdefault(key, {})
+            current[keys[-1]] = value
+
+        return overrides
+
+    def deep_update_config(self, updates):
+        """
+        Recursively updates self.config with nested dictionary 'updates'.
+        """
+        stack = [(self.config, updates)]
+
+        while stack:
+            base, updates = stack.pop()
+            for k, v in updates.items():
+                if isinstance(v, dict) and isinstance(base.get(k), dict):
+                    stack.append((base[k], v))
+                else:
+                    base[k] = v
+
     def discover_scripts(self) -> dict:
-        """
-        Discover script classes in the modules directory.
-        A script class is any class that implements a callable 'run' method.
-        Returns a dictionary mapping module_name -> script metadata.
-        """
         scripts = {}
         for file in self.modules_path.glob("*.py"):
             module_name = file.stem
@@ -185,6 +219,12 @@ def main():
         nargs='*', 
         help='Names of scripts to run automatically (by class name)'
     )
+    parser.add_argument(
+        '--override',
+        nargs='*',
+        default=[],
+        help='Override config values: format section.key=value (e.g., General.dry_run=true)'
+    )
 
     args = parser.parse_args()
     app = App()
@@ -198,6 +238,12 @@ def main():
 
     try:
         app.refresh()
+
+        # Apply overrides if provided
+        if args.override:
+            overrides = app.parse_overrides(args.override)
+            app.deep_update_config(overrides)
+
         if args.scripts_to_run:
             for script_name_input in args.scripts_to_run:
                 matched_name = get_script_name_case_insensitive(script_name_input)
@@ -211,6 +257,10 @@ def main():
             while True:
                 print(f"\n{'='*100}\nWelcome back!\n{'='*100}\n\nAvailable scripts:")
                 app.refresh()
+
+                if args.override:
+                    app.deep_update_config(app.parse_overrides(args.override))
+
                 indexed_names = sorted(app.scripts.items())
                 for i, (name, info) in enumerate(indexed_names, start=1):
                     description = info.get("doc", "")
