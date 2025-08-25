@@ -167,3 +167,7 @@ ReBrainer:
 ReCoder:
   level: 8
   stamp: ENCODE_LEVEL
+
+Stamper:
+  stamps:
+    COMMENT: no rights reserved
