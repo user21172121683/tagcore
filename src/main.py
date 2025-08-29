@@ -143,7 +143,6 @@ class App:
             script_args['stop_flag'] = stop_flag
             logger = setup_logger(
                 name=self.scripts[name]["module"],
-                base_dir=Path(__file__).resolve().parents[1],
                 console_level=script_args.get("console_level", "INFO"),
                 file_level=script_args.get("file_level", "DEBUG")
             )

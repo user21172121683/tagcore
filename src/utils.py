@@ -30,7 +30,6 @@ def index_files(
 
 def setup_logger(
     name: str,
-    base_dir: Path,
     level: int =logging.DEBUG,
     console_level: str = "INFO",
     file_level: str = "DEBUG"
@@ -65,7 +64,7 @@ def setup_logger(
             return f"{color}{message}{self.COLORS['RESET']}"
 
     # Setup log directory and file paths
-    log_dir = base_dir / "logs" / datetime.now().strftime('%Y-%m-%d')
+    log_dir = Path(__file__).resolve().parents[1] / "logs" / datetime.now().strftime('%Y-%m-%d')
     log_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / f"{name}.log"
     archive_dir = log_dir / "archive"
