@@ -171,3 +171,7 @@ ReCoder:
 Stamper:
   stamps:
     COMMENT: no rights reserved
+
+Boxxxer:
+  mixxx_db: mixxxdb.sqlite
+  output: rekordbox.xml
