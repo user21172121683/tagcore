@@ -2,3 +2,4 @@ mutagen==1.47.0
 pillow==11.3.0
 pyyaml==6.0.2
 musicbrainzngs==0.7.1
+protobuf==6.32.0
