@@ -7,6 +7,7 @@ from pprint import pformat
 import threading
 import shutil
 import argparse
+import traceback
 
 
 class App:
@@ -146,7 +147,8 @@ class App:
                     print("Script is running. Type 'q' then press Enter to stop it.")
                     instance.run()
                 except Exception as e:
-                    print(f"Error running script '{name}': {e}", exc_info=True)
+                    print(f"Error running script '{name}': {e}")
+                    traceback.print_exc()
                     print(f"An error occurred while running '{name}'. Check the logs for details.")
 
             # Function to listen for 'q'
@@ -174,7 +176,8 @@ class App:
             listener_thread.join()
 
         except Exception as e:
-            print(f"Error launching script '{name}': {e}", exc_info=True)
+            print(f"Error launching script '{name}': {e}")
+            traceback.print_exc()
             print(f"An error occurred while launching '{name}'. Check the logs for details.")
 
     def refresh(self):
