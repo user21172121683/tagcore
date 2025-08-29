@@ -18,15 +18,18 @@ class Boxxxer:
         self.stop_flag = config.get("stop_flag")
 
         # Load configuration
-        self.mixxx_db = Path(config['mixxx_db'])
+        self.mixxx_db = Path(__file__).resolve().parents[2] / "data" / config.get('mixxx_db')
         self.dry_run = config.get('dry_run', True)
-        self.output = config.get('output', 'rekordbox.xml')
+        self.output = Path(__file__).resolve().parents[2] / "data" / config.get('output', 'rekordbox.xml')
 
         # Initialise indices
         self.mixxx_data = {}
         self.tracks = {}
         self.playlists = {}
         self.crates = {}
+
+        # Stats
+        self._tracks_processed = []
 
         # Mappings
         self.MIXXX_DB_INCLUDE = [
@@ -115,12 +118,13 @@ class Boxxxer:
         self.tracks = self.mixxx_data['library']
 
         # Process tracks
-        for i, track in enumerate(self.tracks):
+        for track in self.tracks:
             if check_stop(self.stop_flag, self.logger):
                 break
+            self._tracks_processed.append(track['title'])
             self.logger.info(
                 processing_message(
-                    current=i,
+                    current=len(self._tracks_processed),
                     total=len(self.tracks),
                     file=track['title'],
                     elapsed=time.time() - self.start_time
@@ -132,6 +136,20 @@ class Boxxxer:
         self.build_playlists()
         self.build_crates()
         self.build_xml()
+
+        # Final summary
+        summary_items = [
+            (self._tracks_processed, "Processed {} tracks.")
+        ]
+
+        self.logger.info(
+            summary_message(
+                name="Boxxxer",
+                summary_items=summary_items,
+                dry_run=self.dry_run,
+                elapsed=time.time() - self.start_time
+            )
+        )
 
     def build_xml(self):
         self.logger.info("Building XML...")
