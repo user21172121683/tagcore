@@ -188,11 +188,26 @@ class Boxxxer:
             if track.get('cues', None):
                 cues = track['cues']
                 for cue in cues:
-                    position_mark = ET.SubElement(track_element, "POSITION_MARK", Name=str(cue["label"]), Type="0", Start=str(self.sample_to_seconds(cue["position"], track["samplerate"], 3)), Num=str(cue["hotcue"]))
-                    if cue['length'] > 0:
+                    position_mark = ET.SubElement(track_element, "POSITION_MARK", Name=str(cue["label"]), Type="0", Start=str(self.frame_to_seconds(cue["position"], track["channels"], track["samplerate"])), Num=str(cue["hotcue"]))
+                    decimal = cue.get('color', None)
+                    if decimal:
+                        rgb = self.decimal_to_rgb(decimal)
+                        position_mark.set(
+                            "Red",
+                            str(rgb[0])
+                        )
+                        position_mark.set(
+                            "Green",
+                            str(rgb[1])
+                        )
+                        position_mark.set(
+                            "Blue",
+                            str(rgb[2])
+                        )
+                    if cue['type'] == 4:
                         position_mark.set(
                             "End",
-                            str(self.sample_to_seconds(cue['position'] + cue['length'], track['samplerate'], 3))
+                            str(self.frame_to_seconds(cue['position'] + cue['length'], track["channels"], track['samplerate']))
                         )
                         position_mark.set(
                             "Type",
@@ -262,12 +277,11 @@ class Boxxxer:
 
         # Cues
         for cue in self.mixxx_data['cues']:
-            if cue['track_id'] == track_id:
+            if cue['track_id'] == track_id and cue['type'] in (1, 4) and cue['hotcue'] != -1:
                 if not track.get('cues', None):
                     track['cues'] = []
-                cue_attribs = {k: v for k, v in cue.items() if k in ['color', 'hotcue', 'label', 'length', 'position']}
+                cue_attribs = {k: v for k, v in cue.items() if k in ['color', 'hotcue', 'label', 'length', 'position', 'type']}
                 track['cues'].append(cue_attribs)
-
 
     def build_playlists(self):
         self.logger.debug("Building playlists...")
@@ -306,8 +320,19 @@ class Boxxxer:
         if track['bpm']:
             track['bpm'] = round(track['bpm'], 2)
     
-    def sample_to_seconds(self, samples, samplerate, rounding=3):
-        return round(samples / samplerate, rounding)
+    def frame_to_seconds(self, samples, channels, samplerate):
+        return "{:.3f}".format(samples / channels / samplerate)
+
+    def decimal_to_rgb(self, decimal_color):
+        """Convert a 24-bit decimal color to RGB tuple."""
+        if not (0 <= decimal_color <= 0xFFFFFF):
+            raise ValueError("Color must be in the range 0 to 16777215 (0xFFFFFF).")
+
+        red = (decimal_color >> 16) & 0xFF
+        green = (decimal_color >> 8) & 0xFF
+        blue = decimal_color & 0xFF
+
+        return red, green, blue
 
     def parse_mixxx_beats(self, track):
         self.logger.debug("Parsing beat information...")
@@ -337,7 +362,7 @@ class Boxxxer:
                         "frame_position": frame_position,
                         "enabled": beat.enabled,
                         "source": source_enum_map.get(beat.source, f"Unknown({beat.source})"),
-                        "time_seconds": self.sample_to_seconds(frame_position, track["samplerate"], 3)
+                        "time_seconds": self.frame_to_seconds(frame_position, track["channels"], track["samplerate"])
                     })
 
                 if beats_list:
@@ -368,7 +393,7 @@ class Boxxxer:
                         "frame_position": frame_position,
                         "enabled": fb.enabled,
                         "source": source_enum_map.get(fb.source, f"Unknown({fb.source})"),
-                        "time_seconds": self.sample_to_seconds(frame_position, track["samplerate"], 3)
+                        "time_seconds": self.frame_to_seconds(frame_position, track["channels"], track["samplerate"])
                     }
 
                 track['beats'] = {
