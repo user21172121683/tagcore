@@ -2,7 +2,7 @@ import sqlite3
 import xml.etree.ElementTree as ET
 import time
 from utils import *
-import beats_pb2
+import modules._beats_pb2 as _beats_pb2
 
 
 class Boxxxer:
@@ -294,9 +294,9 @@ class Boxxxer:
     def parse_mixxx_beats(self, track):
         self.logger.debug("Parsing beat information...")
         source_enum_map = {
-            beats_pb2.ANALYZER: "ANALYZER",
-            beats_pb2.FILE_METADATA: "FILE_METADATA",
-            beats_pb2.USER: "USER"
+            _beats_pb2.ANALYZER: "ANALYZER",
+            _beats_pb2.FILE_METADATA: "FILE_METADATA",
+            _beats_pb2.USER: "USER"
         }
 
         track_id = track.get("id")
@@ -308,7 +308,7 @@ class Boxxxer:
 
         if beats_version.startswith("BeatMap"):
             try:
-                beats_proto = beats_pb2.BeatMap()
+                beats_proto = _beats_pb2.BeatMap()
                 beats_proto.ParseFromString(beats_blob)
 
                 beats_list = []
@@ -332,7 +332,7 @@ class Boxxxer:
 
         elif beats_version.startswith("BeatGrid"):
             try:
-                beats_proto = beats_pb2.BeatGrid()
+                beats_proto = _beats_pb2.BeatGrid()
                 beats_proto.ParseFromString(beats_blob)
 
                 bpm_info = {}

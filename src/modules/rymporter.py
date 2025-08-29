@@ -2,7 +2,7 @@ from mutagen.flac import FLAC
 import traceback
 from utils import *
 from pathlib import Path
-from rymparser import Rymparser
+from modules._rymparser import Rymparser
 import time
 
 
