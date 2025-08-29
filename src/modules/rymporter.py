@@ -13,12 +13,7 @@ class Rymporter:
 
     def __init__(self, **config):
         # Setup logger
-        self.logger = setup_logger(
-            name="rymporter",
-            base_dir=Path(__file__).resolve().parents[2],
-            console_level=config.get("console_level"),
-            file_level=config.get("file_level")
-        )
+        self.logger = config.get('logger')
 
         # Stop flag
         self.stop_flag = config.get("stop_flag")

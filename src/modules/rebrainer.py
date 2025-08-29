@@ -12,12 +12,7 @@ class ReBrainer:
     """
     def __init__(self, **config):
         # Setup logger
-        self.logger = setup_logger(
-            name="rebrainer",
-            base_dir=Path(__file__).resolve().parents[2],
-            console_level=config.get('console_level'),
-            file_level=config.get('file_level')
-        )
+        self.logger = config.get('logger')
 
         # Setup and redirect musicbrainzngs logger
         musicbrainz_logger = logging.getLogger("musicbrainzngs")

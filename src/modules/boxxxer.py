@@ -12,12 +12,7 @@ class Boxxxer:
 
     def __init__(self, **config):
         # Setup logger
-        self.logger = setup_logger(
-            name=Path(__file__).stem,
-            base_dir=Path(__file__).resolve().parents[2],
-            console_level=config.get('console_level', 'DEBUG'),
-            file_level=config.get('file_level', 'DEBUG')
-        )
+        self.logger = config.get('logger')
 
         # Stop flag (for safe quitting)
         self.stop_flag = config.get("stop_flag")

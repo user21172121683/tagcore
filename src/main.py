@@ -8,6 +8,7 @@ import threading
 import shutil
 import argparse
 import traceback
+from utils import setup_logger
 
 
 class App:
@@ -127,18 +128,23 @@ class App:
             script_args = self.config.get('General', {}).copy()
             script_args.update(self.config.get(name, {}))
 
-            script_args_str = pformat(script_args, indent=2, width=80, sort_dicts=True)
-
             if confirm:
-                answer = input(f"{script_args_str}\nRun {name} with the above config? (Y/n): ").strip().lower()
+                answer = input(f"{pformat(script_args, indent=2, width=80, sort_dicts=True)}\nRun {name} with the above config? (Y/n): ").strip().lower()
                 if answer not in ("", "y", "yes"):
                     print("Aborting script run.")
                     return
             else:
-                print(f"\nRunning {name} with config:\n{script_args_str}")
+                print(f"\nRunning {name} with config:\n{pformat(script_args, indent=2, width=80, sort_dicts=True)}")
 
             stop_flag = threading.Event()
             script_args['stop_flag'] = stop_flag
+            logger = setup_logger(
+                name=self.scripts[name]["module"],
+                base_dir=Path(__file__).resolve().parent,
+                console_level=script_args.get("console_level", "INFO"),
+                file_level=script_args.get("file_level", "DEBUG")
+            )
+            script_args['logger'] = logger
             instance = cls(**script_args)
 
             # Function to run the script

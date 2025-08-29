@@ -9,12 +9,7 @@ class Rymfetcher:
     """
 
     def __init__(self, **config):
-        self.logger = setup_logger(
-            name="rymfetcher",
-            base_dir=Path(__file__).resolve().parents[2],
-            console_level=config.get('console_level'),
-            file_level=config.get('file_level')
-        )
+        self.logger = config.get('logger')
         self.username = config.get('username', None)
 
     def run(self):
