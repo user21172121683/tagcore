@@ -109,6 +109,15 @@ class Boxxxer:
             'E': '12B',
         }
 
+        self.RATING_MAP = {
+            0: 0,
+            1: 51,
+            2: 102,
+            3: 153,
+            4: 204,
+            5: 255
+        }
+
     def run(self):
         # Start timer
         self.start_time = time.time()
@@ -319,6 +328,8 @@ class Boxxxer:
             track['key'] = self.KEY_MAP[track['key']]
         if track['bpm']:
             track['bpm'] = round(track['bpm'], 2)
+        if track['rating']:
+            track['rating'] = self.RATING_MAP[track['rating']]
     
     def frame_to_seconds(self, samples, channels, samplerate):
         return "{:.3f}".format(samples / channels / samplerate)
