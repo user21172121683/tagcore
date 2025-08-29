@@ -30,6 +30,9 @@ class App:
         self.config = {}
         self.scripts = {}
 
+        # Banner
+        print("┌┬┐┌─┐┌─┐┌─┐┌─┐┬─┐┌─┐\n │ ├─┤│ ┬│  │ │├┬┘├┤ \n ┴ ┴ ┴└─┘└─┘└─┘┴└─└─┘")
+
     def find_config(self) -> Path:
         """
         Find the config.yaml file in the parent directory of the script.
@@ -191,7 +194,6 @@ class App:
         Refresh the configuration and script discovery.
         Called each time the main menu is displayed.
         """
-        print("Refreshing configuration and scripts...")
         self.config_path = self.find_config()
         self.config = self.load_config()
         self.scripts = self.discover_scripts()
@@ -264,7 +266,7 @@ def main():
         else:
             # Interactive menu
             while True:
-                print(f"\n{'='*100}\nWelcome back!\n{'='*100}\n\nAvailable scripts:")
+                print(f"{'='*100}\nWelcome back!\n{'='*100}\n\nAvailable scripts:")
                 app.refresh()
 
                 if args.override:
