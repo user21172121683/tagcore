@@ -175,3 +175,4 @@ Stamper:
 Boxxxer:
   mixxx_db: mixxxdb.sqlite
   output: rekordbox.xml
+  hot_to_memory: True

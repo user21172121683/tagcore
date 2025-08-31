@@ -21,6 +21,7 @@ class Boxxxer:
         self.mixxx_db = Path(__file__).resolve().parents[2] / "data" / config.get('mixxx_db')
         self.dry_run = config.get('dry_run', True)
         self.output = Path(__file__).resolve().parents[2] / "data" / config.get('output', 'rekordbox.xml')
+        self.hot_to_memory = config.get('hot_to_memory', False)
 
         # Initialise indices
         self.mixxx_data = {}
@@ -53,7 +54,7 @@ class Boxxxer:
             'Kind': 'filetype',
             'Size': 'filesize',
             'TotalTime': 'duration',
-            'DiscNumber': None,
+            'DiscNumber': 'discnumber', # Not store by Mixxx, set to 0
             'TrackNumber': 'tracknumber',
             'Year': 'year',
             'AverageBpm': 'bpm',
@@ -64,10 +65,10 @@ class Boxxxer:
             'PlayCount': 'timesplayed',
             'Rating': 'rating',
             'Location': 'location',
-            'Remixer': None,
+            'Remixer': 'remixer', # Not store by Mixxx, set to ""
             'Tonality': 'key',
-            'Label': None,
-            'Mix': None
+            'Label': 'label', # Not store by Mixxx, set to ""
+            'Mix': 'mix', # Not store by Mixxx, set to ""
         }
 
         self.KEY_MAP = {
@@ -118,6 +119,19 @@ class Boxxxer:
             5: 255
         }
 
+        self.COLOR_MAP = {
+            "Red":    ((120,   0,   0), (255, 100, 100), "0xFF0000"),
+            "Orange": ((200, 100,   0), (255, 170,  80), "0xFFA500"),
+            "Yellow": ((200, 200,   0), (255, 255, 150), "0xFFFF00"),
+            "Green":  ((  0, 100,   0), (150, 255, 180), "0x00FF00"),
+            "Aqua":   ((  0, 200, 200), (150, 255, 255), "0x25FDE9"),
+            "Blue":   ((  0,   0, 100), (150, 150, 255), "0x0000FF"),
+            "Purple": ((120,   0, 120), (200, 100, 255), "0x660099"),
+            "Pink":   ((200,   0, 100), (255, 200, 255), "0xFF007F"),
+            "Gray":   ((100, 100, 100), (180, 180, 180), "0x808080"),
+            "White":  ((220, 220, 220), (255, 255, 255), "0xFFFFFF")
+        }
+
     def run(self):
         # Start timer
         self.start_time = time.time()
@@ -142,8 +156,14 @@ class Boxxxer:
             self.merge_tables(track)
             self.parse_mixxx_beats(track)
             self.fix_values(track)
+
+        # Build playlists
         self.build_playlists()
+
+        # Build crates
         self.build_crates()
+
+        # Build XML
         self.build_xml()
 
         # Final summary
@@ -184,39 +204,73 @@ class Boxxxer:
 
             track_element = ET.SubElement(collection, "TRACK", track_attribs)
 
+            if track.get('color'):
+                track_element.set(
+                    "Colour",
+                    track.get('color')
+                )
+
             # TEMPO
             if track['beats']:
-                beats = track['beats']
-                if beats['type'] == "BeatMap":
-                    for beat in beats['beats']:
-                        ET.SubElement(track_element, "TEMPO", Inizio=str(beat['time_seconds']), Bpm=str(round(track['bpm'], 2)), Metro="4/4", Battito="1")
-                elif beats['type'] == "BeatGrid":
-                    ET.SubElement(track_element, "TEMPO", Inizio=str(beats['first_beat']['time_seconds']), Bpm=str(round(beats['bpm_info']['bpm'], 2)), Metro="4/4", Battito="1")
+                for i, beat in enumerate(track['beats']):
+                    ET.SubElement(
+                        track_element,
+                        "TEMPO",
+                        Inizio=str(beat),
+                        Bpm=str(round(track['bpm'], 2)),
+                        Metro="4/4",
+                        Battito=str((i % 4) + 1)
+                    )
 
             # CUES
             if track.get('cues', None):
                 cues = track['cues']
                 for cue in cues:
-                    position_mark = ET.SubElement(track_element, "POSITION_MARK", Name=str(cue["label"]), Type="0", Start=str(self.frame_to_seconds(cue["position"], track["channels"], track["samplerate"])), Num=str(cue["hotcue"]))
-                    decimal = cue.get('color', None)
-                    if decimal:
-                        rgb = self.decimal_to_rgb(decimal)
+                    position_mark = ET.SubElement(
+                        track_element,
+                        "POSITION_MARK",
+                        Name="",
+                        Type="0",
+                        Start=str(self.adjust_cue_time(cue["position"], track["channels"], track["samplerate"])),
+                        Num=str(cue["hotcue"] if not self.hot_to_memory else -1)
+                    )
+
+                    # The cue point
+                    if cue['type'] == 2:
                         position_mark.set(
-                            "Red",
-                            str(rgb[0])
+                            "Num",
+                            "-1"
                         )
+
+                    # Hot cues and loops
+                    if cue['type'] in (1, 4):
+                        # Hot cue name
                         position_mark.set(
-                            "Green",
-                            str(rgb[1])
+                            "Name",
+                            cue.get('label', "")
                         )
-                        position_mark.set(
-                            "Blue",
-                            str(rgb[2])
-                        )
+
+                        # Hot cue colour
+                        if cue.get('color') and not self.hot_to_memory:
+                            rgb = self.decimal_to_rgb(cue.get('color'))
+                            position_mark.set(
+                                "Red",
+                                str(rgb[0])
+                            )
+                            position_mark.set(
+                                "Green",
+                                str(rgb[1])
+                            )
+                            position_mark.set(
+                                "Blue",
+                                str(rgb[2])
+                            )
+                    
+                    # Loop end point and type
                     if cue['type'] == 4:
                         position_mark.set(
                             "End",
-                            str(self.frame_to_seconds(cue['position'] + cue['length'], track["channels"], track['samplerate']))
+                            str(self.adjust_cue_time(cue['position'] + cue['length'], track["channels"], track['samplerate']))
                         )
                         position_mark.set(
                             "Type",
@@ -232,7 +286,7 @@ class Boxxxer:
             node = ET.SubElement(playlists, "NODE", Type="1", Name=str(playlist), KeyType="0", Entries=str(len(self.playlists[playlist])))
             for track in self.playlists[playlist]:
                 ET.SubElement(node, "TRACK", Key=str(track))
-        
+
         # CRATES
         self.logger.debug("Populating crates...")
         crates = ET.SubElement(lists_root, "NODE", Type="0", Name="Crates", Count=str(len(self.crates)))
@@ -273,7 +327,7 @@ class Boxxxer:
         finally:
             if 'conn' in locals():
                 conn.close()
-    
+
     def merge_tables(self, track):
         self.logger.debug("Merging tables...")
         track_id = track['id']
@@ -281,12 +335,12 @@ class Boxxxer:
         # File path and size
         for location in self.mixxx_data['track_locations']:
             if location['id'] == track_id:
-                track['location'] = "file://localhost/" + location['location'].replace(' ', '%20')
+                track['location'] = location['location']
                 track['filesize'] = location['filesize']
 
         # Cues
         for cue in self.mixxx_data['cues']:
-            if cue['track_id'] == track_id and cue['type'] in (1, 4) and cue['hotcue'] != -1:
+            if cue['track_id'] == track_id and cue['type'] in (1, 2, 4):
                 if not track.get('cues', None):
                     track['cues'] = []
                 cue_attribs = {k: v for k, v in cue.items() if k in ['color', 'hotcue', 'label', 'length', 'position', 'type']}
@@ -296,122 +350,134 @@ class Boxxxer:
         self.logger.debug("Building playlists...")
         for playlist in self.mixxx_data['Playlists']:
             if playlist['hidden'] == 0:
-                playlist_name = playlist['name']
-                playlist_id = playlist['id']
+                self.playlists[playlist['name']] = []
                 for track in self.mixxx_data['PlaylistTracks']:
-                    if track['playlist_id'] == playlist_id:
-                        if playlist_name not in self.playlists:
-                            self.playlists[playlist_name] = []
-                        self.playlists[playlist_name].append(track['track_id'])
+                    if track['playlist_id'] == playlist['id']:
+                        self.playlists[playlist['name']].append(track['track_id'])
 
     def build_crates(self):
         self.logger.debug("Building crates...")
         for crate in self.mixxx_data['crates']:
             if crate['show'] == 1:
-                crate_name = crate['name']
-                crate_id = crate['id']
+                self.crates[crate['name']] = []
                 for track in self.mixxx_data['crate_tracks']:
-                    if track['crate_id'] == crate_id:
-                        if crate_name not in self.crates:
-                            self.crates[crate_name] = []
-                        self.crates[crate_name].append(track['track_id'])
+                    if track['crate_id'] == crate['id']:
+                        self.crates[crate['name']].append(track['track_id'])
 
     def fix_values(self, track):
         self.logger.debug("Fixing values for compatibility...")
+
+        # Filetype
         if track['filetype'] == 'flac':
             track['filetype'] = 'FLAC File'
+
+        # Filepath
+        track['location'] = "file://localhost/" + track['location'].replace(' ', '%20')
+
+        # Round duration to nearest second
         track['duration'] = str(round(track['duration']))
+
+        # Format date to YYYY-MM-DD
         track['datetime_added'] = track['datetime_added'][:10]
-        if track['grouping'] == 'None':
-            track['grouping'] = ''
+
+        # Standardise key
         if track['key'] != '':
             track['key'] = self.KEY_MAP[track['key']]
+
+        # Round BPM to 2 decimal places
         if track['bpm']:
             track['bpm'] = round(track['bpm'], 2)
+
+        # Map rating
         if track['rating']:
             track['rating'] = self.RATING_MAP[track['rating']]
-    
-    def frame_to_seconds(self, samples, channels, samplerate):
+        else:
+            track['rating'] = 0
+
+        # Genre
+        if not track['genre']:
+            track['genre'] = ""
+
+        # Map colour
+        if track.get('color'):
+            track['grouping'] = self.classify_rgb(*self.decimal_to_rgb(track['color']))[0]
+            track['color'] = self.classify_rgb(*self.decimal_to_rgb(track['color']))[1]
+        else:
+            track['grouping'] = ""
+        
+        # Fields that Mixxx doesn't store
+        track['discnumber'] = 0
+        track['composer'] = ""
+        track['remixer'] = ""
+        track['label'] = ""
+        track['mix'] = ""
+
+    def adjust_cue_time(self, samples, channels, samplerate):
         return "{:.3f}".format(samples / channels / samplerate)
 
-    def decimal_to_rgb(self, decimal_color):
-        """Convert a 24-bit decimal color to RGB tuple."""
-        if not (0 <= decimal_color <= 0xFFFFFF):
-            raise ValueError("Color must be in the range 0 to 16777215 (0xFFFFFF).")
+    def adjust_beat_time(self, frame_position, samplerate, bpm):
+        position_seconds = frame_position / samplerate
+        if bpm and bpm > 0:
+            beat_length = 60.0 / bpm
+            if position_seconds < 0:
+                position_seconds += beat_length
+            elif position_seconds > beat_length:
+                position_seconds -= beat_length
+        return "{:.3f}".format(position_seconds)
 
-        red = (decimal_color >> 16) & 0xFF
-        green = (decimal_color >> 8) & 0xFF
-        blue = decimal_color & 0xFF
+    def decimal_to_rgb(self, decimal):
+        r = (decimal >> 16) & 0xFF
+        g = (decimal >> 8) & 0xFF
+        b = decimal & 0xFF
+        return r, g, b
 
-        return red, green, blue
+    def classify_rgb(self, r, g, b):
+        for color_str, (min_rgb, max_rgb, color_hex) in self.COLOR_MAP.items():
+            if (
+                min_rgb[0] <= r <= max_rgb[0] and
+                min_rgb[1] <= g <= max_rgb[1] and
+                min_rgb[2] <= b <= max_rgb[2]
+            ):
+                return color_str, color_hex
+        return "Unknown"
 
     def parse_mixxx_beats(self, track):
         self.logger.debug("Parsing beat information...")
-        source_enum_map = {
-            _beats_pb2.ANALYZER: "ANALYZER",
-            _beats_pb2.FILE_METADATA: "FILE_METADATA",
-            _beats_pb2.USER: "USER"
-        }
-
-        track_id = track.get("id")
         beats_blob = track.get("beats")
         beats_version = track.get("beats_version", "")
+        samplerate = track.get("samplerate")
+        bpm = track.get("bpm")
 
-        if not beats_blob:
+        if not beats_blob or not samplerate:
             return
+
+        beat_times = []
 
         if beats_version.startswith("BeatMap"):
             try:
                 beats_proto = _beats_pb2.BeatMap()
                 beats_proto.ParseFromString(beats_blob)
 
-                beats_list = []
                 for beat in beats_proto.beat:
                     frame_position = beat.frame_position
+                    time_seconds = self.adjust_beat_time(frame_position, samplerate, bpm)
+                    beat_times.append(time_seconds)
 
-                    beats_list.append({
-                        "frame_position": frame_position,
-                        "enabled": beat.enabled,
-                        "source": source_enum_map.get(beat.source, f"Unknown({beat.source})"),
-                        "time_seconds": self.frame_to_seconds(frame_position, track["channels"], track["samplerate"])
-                    })
-
-                if beats_list:
-                    track['beats'] = {
-                        "type": "BeatMap",
-                        "beats": beats_list
-                    }
             except Exception as e:
-                self.logger.warning(f"Failed to parse BeatMap for track_id {track_id}: {e}")
+                self.logger.warning(f"Failed to parse BeatMap: {e}")
 
         elif beats_version.startswith("BeatGrid"):
             try:
                 beats_proto = _beats_pb2.BeatGrid()
                 beats_proto.ParseFromString(beats_blob)
 
-                bpm_info = {}
-                if beats_proto.HasField('bpm'):
-                    bpm_info = {
-                        "bpm": beats_proto.bpm.bpm,
-                        "source": source_enum_map.get(beats_proto.bpm.source, f"Unknown({beats_proto.bpm.source})")
-                    }
-
-                first_beat = None
-                if beats_proto.HasField('first_beat'):
-                    fb = beats_proto.first_beat
-                    frame_position = fb.frame_position
-                    first_beat = {
-                        "frame_position": frame_position,
-                        "enabled": fb.enabled,
-                        "source": source_enum_map.get(fb.source, f"Unknown({fb.source})"),
-                        "time_seconds": self.frame_to_seconds(frame_position, track["channels"], track["samplerate"])
-                    }
-
-                track['beats'] = {
-                    "type": "BeatGrid",
-                    "bpm_info": bpm_info,
-                    "first_beat": first_beat,
-                }
+                if beats_proto.HasField("first_beat"):
+                    frame_position = beats_proto.first_beat.frame_position
+                    time_seconds = self.adjust_beat_time(frame_position, samplerate, bpm)
+                    beat_times.append(time_seconds)
 
             except Exception as e:
-                self.logger.warning(f"Failed to parse BeatGrid for track_id {track_id}: {e}")
+                self.logger.warning(f"Failed to parse BeatGrid: {e}")
+
+        if beat_times:
+            track['beats'] = beat_times
