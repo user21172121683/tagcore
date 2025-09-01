@@ -88,7 +88,7 @@ class Flagger:
                     if self.timestamp:
                         audio[f"{self.problems_field}_LASTCHECKED"] = datetime.now().strftime('%Y-%m-%d')
                     audio.save()
-                    self.logger.info(dry_run_message(f"Problems saved to {self.problems_field}."))
+                    self.logger.info(dry_run_message(self.dry_run, f"Problems saved to {self.problems_field}."))
         else:
             if not self.dry_run:
                 if audio.get(self.problems_field, []):

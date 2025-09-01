@@ -210,7 +210,7 @@ class Rymporter:
             if not self.dry_run:
                 try:
                     audio.save()
-                    self.logger.info(dry_run_message("File successfully updated with RYM data."))
+                    self.logger.info(dry_run_message(self.dry_run, "File successfully updated with RYM data."))
                 except Exception as e:
                     self.logger.error(f"Error saving file: {e}")
         else:
