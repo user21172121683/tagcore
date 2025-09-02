@@ -42,7 +42,8 @@ Rymporter:
 Flagger:
   skip_integrity_check: false
   problems_field: PROBLEMS
-  timestamp: true
+  timestamp: PROBLEMS_LASTCHECKED
+  streamstamp: FLAC_STREAM
   cover_target_size: [1000, 1000]
   cover_allowed_formats:
     - jpeg

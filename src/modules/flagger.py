@@ -24,7 +24,8 @@ class Flagger:
         self.main_dir = Path(config.get('main_dir'))
         self.tags_to_check = config.get('tags_to_check', [])
         self.problems_field = config.get('problems_field', 'PROBLEMS')
-        self.timestamp = config.get('timestamp', True)
+        self.timestamp = config.get('timestamp', None)
+        self.streamstamp = config.get('streamstamp', None)
         self.cover_target_size = tuple(config.get('cover_target_size', [1000, 1000]))
         self.cover_allowed_formats = {fmt.lower() for fmt in config.get('cover_allowed_formats', ['jpg', 'jpeg'])}
         self.skip_integrity_check = config.get('skip_integrity_check', False)
@@ -49,10 +50,22 @@ class Flagger:
             if check_stop(self.stop_flag, self.logger):
                 break
             self._files_processed.append(file)
-            self.logger.info(processing_message(len(self._files_processed), len(self.files), file))
-            audio = FLAC(file)
-            self.check_problems(file, audio)
-            self.document_problems(file, audio)
+            self.logger.info(
+                processing_message(
+                    current=len(self._files_processed),
+                    total=len(self.files),
+                    file=file,
+                    elapsed=time.time() - self.start_time
+                )
+            )
+            try:
+                audio = FLAC(file)
+                self.check_problems(file, audio)
+                self.document_problems(file, audio)
+            except Exception as e:
+                self.logger.error(f"Failed to process {file}: {e}")
+                self._files_failed.append(file)
+                continue
 
         # Final summary
         summary_items = [
@@ -72,34 +85,45 @@ class Flagger:
         )
 
     def check_problems(self, file: Path, audio: FLAC):
-        self.check_integrity(file)
+        self.check_integrity(file, audio)
         self.check_tags(file, audio)
         self.check_cover(file, audio)
     
     def document_problems(self, file: Path, audio: FLAC):
         problems = self._files_flagged.get(file, [])
+        if self.streamstamp and "CORRUPTED STREAM" not in problems and not self.dry_run:
+            if audio.get(self.streamstamp, []) != ["OK"]:
+                audio[self.streamstamp] = "OK"
+                audio.save()
+                self.logger.debug(f"Streamstamp {self.streamstamp}=OK added.")
         if problems:
             if sorted(problems) == sorted(audio.get(self.problems_field, [])):
                 self._files_flagged_already.append(file)
-                self.logger.info(f"Problems already recorded in {self.problems_field}.")
+                self.logger.debug(f"Problems already recorded in {self.problems_field}.")
             else:
                 if not self.dry_run:
                     audio[self.problems_field] = problems
                     if self.timestamp:
-                        audio[f"{self.problems_field}_LASTCHECKED"] = datetime.now().strftime('%Y-%m-%d')
+                        audio[self.timestamp] = datetime.now().strftime('%Y-%m-%d')
+                        self.logger.debug(f"Timestamp added to {self.timestamp}.")
                     audio.save()
-                    self.logger.info(dry_run_message(self.dry_run, f"Problems saved to {self.problems_field}."))
+                    self.logger.debug(dry_run_message(self.dry_run, f"Problems saved to {self.problems_field}."))
         else:
             if not self.dry_run:
                 if audio.get(self.problems_field, []):
                     audio[self.problems_field] = []
                     audio.save()
-            self.logger.info(f"No problems found.")
+            self.logger.debug("No problems found.")
 
-    def check_integrity(self, file: Path):
+    def check_integrity(self, file: Path, audio: FLAC):
         if self.skip_integrity_check:
             self.logger.debug("Skipping integrity check.")
             return
+
+        if self.streamstamp and audio.get(self.streamstamp, []) == ["OK"]:
+            self.logger.debug(f"Streamstamp {self.streamstamp}=OK found — skipping integrity check.")
+            return
+
         self.logger.debug("Checking integrity...")
         try:
             result = subprocess.run(
@@ -109,11 +133,10 @@ class Flagger:
                 text=True
             )
             if result.returncode == 0:
-                self.logger.debug(f"OK!")
+                self.logger.debug("OK!")
             else:
                 self.logger.warning(f"FAILED: {result.stderr.strip()}")
                 self._files_flagged.setdefault(file, []).append("CORRUPTED STREAM")
-            return
         except FileNotFoundError:
             self.logger.critical("The 'flac' command is not found. Please install the FLAC utility.")
 
