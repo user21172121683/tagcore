@@ -11,17 +11,15 @@ class Boxxxer:
     """
 
     def __init__(self, **config):
-        # Setup logger
-        self.logger = config.get('logger')
-
-        # Stop flag (for safe quitting)
-        self.stop_flag = config.get("stop_flag")
+        # Setup technical stuff
+        self.logger = get_config(config, "logger", expected_type=logging.Logger, optional=True, default=None)
+        self.stop_flag = get_config(config, "stop_flag", expected_type=Event, optional=True, default=None)
 
         # Load configuration
-        self.mixxx_db = Path(__file__).resolve().parents[2] / "data" / config.get('mixxx_db')
-        self.dry_run = config.get('dry_run', True)
-        self.output = Path(__file__).resolve().parents[2] / "data" / config.get('output', 'rekordbox.xml')
-        self.hot_to_memory = config.get('hot_to_memory', False)
+        self.dry_run = get_config(config, "dry_run", expected_type=bool, optional=True, default=True)
+        self.mixxx_db = DATA_DIR / get_config(config, "mixxx_db", expected_type=str, optional=False)
+        self.output = DATA_DIR / get_config(config, "output", expected_type=str, optional=True, default="rekordbox.xml")
+        self.hot_to_memory = get_config(config, "hot_to_memory", expected_type=bool, optional=True, default=False)
 
         # Initialise indices
         self.mixxx_data = {}
@@ -34,80 +32,80 @@ class Boxxxer:
 
         # Mappings
         self.MIXXX_DB_INCLUDE = [
-            'PlaylistTracks',
-            'Playlists',
-            'crate_tracks',
-            'crates',
-            'cues',
-            'library',
-            'track_locations'
+            "PlaylistTracks",
+            "Playlists",
+            "crate_tracks",
+            "crates",
+            "cues",
+            "library",
+            "track_locations"
         ]
 
         self.TRACK_MAP = {
-            'TrackID': 'id',
-            'Name': 'title',
-            'Artist': 'artist',
-            'Composer': 'composer',
-            'Album': 'album',
-            'Grouping': 'grouping',
-            'Genre': 'genre',
-            'Kind': 'filetype',
-            'Size': 'filesize',
-            'TotalTime': 'duration',
-            'DiscNumber': 'discnumber', # Not store by Mixxx, set to 0
-            'TrackNumber': 'tracknumber',
-            'Year': 'year',
-            'AverageBpm': 'bpm',
-            'DateAdded': 'datetime_added',
-            'BitRate': 'bitrate',
-            'SampleRate': 'samplerate',
-            'Comments': 'comment',
-            'PlayCount': 'timesplayed',
-            'Rating': 'rating',
-            'Location': 'location',
-            'Remixer': 'remixer', # Not store by Mixxx, set to ""
-            'Tonality': 'key',
-            'Label': 'label', # Not store by Mixxx, set to ""
-            'Mix': 'mix', # Not store by Mixxx, set to ""
+            "TrackID": "id",
+            "Name": "title",
+            "Artist": "artist",
+            "Composer": "composer",
+            "Album": "album",
+            "Grouping": "grouping",
+            "Genre": "genre",
+            "Kind": "filetype",
+            "Size": "filesize",
+            "TotalTime": "duration",
+            "DiscNumber": "discnumber",     # Not stored by Mixxx, set to 0
+            "TrackNumber": "tracknumber",
+            "Year": "year",
+            "AverageBpm": "bpm",
+            "DateAdded": "datetime_added",
+            "BitRate": "bitrate",
+            "SampleRate": "samplerate",
+            "Comments": "comment",
+            "PlayCount": "timesplayed",
+            "Rating": "rating",
+            "Location": "location",
+            "Remixer": "remixer",           # Not stored by Mixxx, set to ""
+            "Tonality": "key",
+            "Label": "label",               # Not stored by Mixxx, set to ""
+            "Mix": "mix",                   # Not stored by Mixxx, set to ""
         }
 
         self.KEY_MAP = {
-            'Abm': '1A',
-            'G#m': '1A',
-            'Ebm': '2A',
-            'D#m': '2A',
-            'Bbm': '3A',
-            'A#m': '3A',
-            'Fm': '4A',
-            'Cm': '5A',
-            'Gm': '6A',
-            'Dm': '7A',
-            'Am': '8A',
-            'Em': '9A',
-            'Bm': '10A',
-            'Cbm': '10A',
-            'F#m': '11A',
-            'Gbm': '11A',
-            'Dbm': '12A',
-            'C#m': '12A',
-            'B': '1B',
-            'Cb': '1B',
-            'F#': '2B',
-            'Gb': '2B',
-            'Db': '3B',
-            'C#': '3B',
-            'Ab': '4B',
-            'G#': '4B',
-            'Eb': '5B',
-            'D#': '5B',
-            'Bb': '6B',
-            'A#': '6B',
-            'F': '7B',
-            'C': '8B',
-            'G': '9B',
-            'D': '10B',
-            'A': '11B',
-            'E': '12B',
+            "Abm": "1A",
+            "G#m": "1A",
+            "Ebm": "2A",
+            "D#m": "2A",
+            "Bbm": "3A",
+            "A#m": "3A",
+            "Fm": "4A",
+            "Cm": "5A",
+            "Gm": "6A",
+            "Dm": "7A",
+            "Am": "8A",
+            "Em": "9A",
+            "Bm": "10A",
+            "Cbm": "10A",
+            "F#m": "11A",
+            "Gbm": "11A",
+            "Dbm": "12A",
+            "C#m": "12A",
+            "B": "1B",
+            "Cb": "1B",
+            "F#": "2B",
+            "Gb": "2B",
+            "Db": "3B",
+            "C#": "3B",
+            "Ab": "4B",
+            "G#": "4B",
+            "Eb": "5B",
+            "D#": "5B",
+            "Bb": "6B",
+            "A#": "6B",
+            "F": "7B",
+            "C": "8B",
+            "G": "9B",
+            "D": "10B",
+            "A": "11B",
+            "E": "12B",
         }
 
         self.RATING_MAP = {
@@ -138,47 +136,46 @@ class Boxxxer:
 
         # Build indices
         self.mixxx_data = self._sqlite_to_dict()
-        self.tracks = self.mixxx_data['library']
+        self.tracks = self.mixxx_data["library"]
 
         # Process tracks
+        self.logger.info("Processing tracks...")
         for track in self.tracks:
             if check_stop(self.stop_flag, self.logger):
                 break
-            self._tracks_processed.append(track['title'])
-            self.logger.info(
-                processing_message(
-                    current=len(self._tracks_processed),
-                    total=len(self.tracks),
-                    file=track['title'],
-                    elapsed=time.time() - self.start_time
-                )
-            )
+            self._tracks_processed.append(track["title"])
             self.merge_tables(track)
             self.parse_mixxx_beats(track)
             self.fix_values(track)
 
-        # Build playlists
-        self.build_playlists()
+        if not check_stop(self.stop_flag, self.logger):
+            # Build playlists
+            self.build_playlists()
 
-        # Build crates
-        self.build_crates()
+            # Build crates
+            self.build_crates()
 
-        # Build XML
-        self.build_xml()
+            # Build XML
+            self.build_xml()
 
-        # Final summary
-        summary_items = [
-            (self._tracks_processed, "Processed {} tracks.")
-        ]
+            # Final summary
+            summary_items = [
+                (self._tracks_processed, "Processed {} tracks."),
+                (self.playlists, "Converted {} playlists."),
+                (self.crates, "Converted {} crates.")
+            ]
 
-        self.logger.info(
-            summary_message(
-                name="Boxxxer",
-                summary_items=summary_items,
-                dry_run=self.dry_run,
-                elapsed=time.time() - self.start_time
+            self.logger.info(
+                summary_message(
+                    name="Boxxxer",
+                    summary_items=summary_items,
+                    dry_run=self.dry_run,
+                    elapsed=time.time() - self.start_time
+                )
             )
-        )
+        
+        else:
+            self.logger.info("Process interrupted by stop flag. No output generated.")
 
     def build_xml(self):
         self.logger.info("Building XML...")
@@ -192,7 +189,7 @@ class Boxxxer:
         collection = ET.SubElement(dj_playlists, "COLLECTION", Entries=str(len(self.tracks)))
 
         # TRACKS
-        self.logger.debug("Populating tracks...")
+        self.logger.info("Populating tracks...")
         for track in self.tracks:
             track_attribs = {}
             for xml_attr, mixxx_key in self.TRACK_MAP.items():
@@ -204,27 +201,27 @@ class Boxxxer:
 
             track_element = ET.SubElement(collection, "TRACK", track_attribs)
 
-            if track.get('color'):
+            if track.get("color"):
                 track_element.set(
                     "Colour",
-                    track.get('color')
+                    track.get("color")
                 )
 
             # TEMPO
-            if track['beats']:
-                for i, beat in enumerate(track['beats']):
+            if track["beats"]:
+                for i, beat in enumerate(track["beats"]):
                     ET.SubElement(
                         track_element,
                         "TEMPO",
                         Inizio=str(beat),
-                        Bpm=str(round(track['bpm'], 2)),
+                        Bpm=str(round(track["bpm"], 2)),
                         Metro="4/4",
                         Battito=str((i % 4) + 1)
                     )
 
             # CUES
-            if track.get('cues', None):
-                cues = track['cues']
+            if track.get("cues", None):
+                cues = track["cues"]
                 for cue in cues:
                     position_mark = ET.SubElement(
                         track_element,
@@ -236,23 +233,23 @@ class Boxxxer:
                     )
 
                     # The cue point
-                    if cue['type'] == 2:
+                    if cue["type"] == 2:
                         position_mark.set(
                             "Num",
                             "-1"
                         )
 
                     # Hot cues and loops
-                    if cue['type'] in (1, 4):
+                    if cue["type"] in (1, 4):
                         # Hot cue name
                         position_mark.set(
                             "Name",
-                            cue.get('label', "")
+                            cue.get("label", "")
                         )
 
                         # Hot cue colour
-                        if cue.get('color') and not self.hot_to_memory:
-                            rgb = self.decimal_to_rgb(cue.get('color'))
+                        if cue.get("color") and not self.hot_to_memory:
+                            rgb = self.decimal_to_rgb(cue.get("color"))
                             position_mark.set(
                                 "Red",
                                 str(rgb[0])
@@ -267,10 +264,10 @@ class Boxxxer:
                             )
                     
                     # Loop end point and type
-                    if cue['type'] == 4:
+                    if cue["type"] == 4:
                         position_mark.set(
                             "End",
-                            str(self.adjust_cue_time(cue['position'] + cue['length'], track["channels"], track['samplerate']))
+                            str(self.adjust_cue_time(cue["position"] + cue["length"], track["channels"], track["samplerate"]))
                         )
                         position_mark.set(
                             "Type",
@@ -278,7 +275,7 @@ class Boxxxer:
                         )
 
         # PLAYLISTS
-        self.logger.debug("Populating playlists...")
+        self.logger.info("Populating playlists and crates...")
         lists = ET.SubElement(dj_playlists, "PLAYLISTS")
         lists_root = ET.SubElement(lists, "NODE", Type="0", Name="ROOT", Count="2")
         playlists = ET.SubElement(lists_root, "NODE", Type="0", Name="Playlists", Count=str(len(self.playlists)))
@@ -288,7 +285,6 @@ class Boxxxer:
                 ET.SubElement(node, "TRACK", Key=str(track))
 
         # CRATES
-        self.logger.debug("Populating crates...")
         crates = ET.SubElement(lists_root, "NODE", Type="0", Name="Crates", Count=str(len(self.crates)))
         for crate in self.crates:
             node = ET.SubElement(crates, "NODE", Type="1", Name=str(crate), KeyType="0", Entries=str(len(self.crates[crate])))
@@ -302,14 +298,13 @@ class Boxxxer:
         self.logger.info(dry_run_message(self.dry_run, f"Saved output to {self.output}!"))
 
     def _sqlite_to_dict(self):
-        self.logger.debug(f"Parsing {self.mixxx_db}...")
         try:
             conn = sqlite3.connect(self.mixxx_db)
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
 
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
-            all_tables = [row['name'] for row in cursor.fetchall()]
+            all_tables = [row["name"] for row in cursor.fetchall()]
 
             target_tables = self.MIXXX_DB_INCLUDE if self.MIXXX_DB_INCLUDE else all_tables
             target_tables = [t for t in target_tables if t in all_tables]
@@ -325,92 +320,87 @@ class Boxxxer:
             self.logger.error(f"SQLite error: {e}")
             return {}
         finally:
-            if 'conn' in locals():
+            if "conn" in locals():
                 conn.close()
 
     def merge_tables(self, track):
-        self.logger.debug("Merging tables...")
-        track_id = track['id']
+        track_id = track["id"]
 
         # File path and size
-        for location in self.mixxx_data['track_locations']:
-            if location['id'] == track_id:
-                track['location'] = location['location']
-                track['filesize'] = location['filesize']
+        for location in self.mixxx_data["track_locations"]:
+            if location["id"] == track_id:
+                track["location"] = location["location"]
+                track["filesize"] = location["filesize"]
 
         # Cues
-        for cue in self.mixxx_data['cues']:
-            if cue['track_id'] == track_id and cue['type'] in (1, 2, 4):
-                if not track.get('cues', None):
-                    track['cues'] = []
-                cue_attribs = {k: v for k, v in cue.items() if k in ['color', 'hotcue', 'label', 'length', 'position', 'type']}
-                track['cues'].append(cue_attribs)
+        for cue in self.mixxx_data["cues"]:
+            if cue["track_id"] == track_id and cue["type"] in (1, 2, 4):
+                if not track.get("cues", None):
+                    track["cues"] = []
+                cue_attribs = {k: v for k, v in cue.items() if k in ["color", "hotcue", "label", "length", "position", "type"]}
+                track["cues"].append(cue_attribs)
 
     def build_playlists(self):
-        self.logger.debug("Building playlists...")
-        for playlist in self.mixxx_data['Playlists']:
-            if playlist['hidden'] == 0:
-                self.playlists[playlist['name']] = []
-                for track in self.mixxx_data['PlaylistTracks']:
-                    if track['playlist_id'] == playlist['id']:
-                        self.playlists[playlist['name']].append(track['track_id'])
+        for playlist in self.mixxx_data["Playlists"]:
+            if playlist["hidden"] == 0:
+                self.playlists[playlist["name"]] = []
+                for track in self.mixxx_data["PlaylistTracks"]:
+                    if track["playlist_id"] == playlist["id"]:
+                        self.playlists[playlist["name"]].append(track["track_id"])
 
     def build_crates(self):
-        self.logger.debug("Building crates...")
-        for crate in self.mixxx_data['crates']:
-            if crate['show'] == 1:
-                self.crates[crate['name']] = []
-                for track in self.mixxx_data['crate_tracks']:
-                    if track['crate_id'] == crate['id']:
-                        self.crates[crate['name']].append(track['track_id'])
+        for crate in self.mixxx_data["crates"]:
+            if crate["show"] == 1:
+                self.crates[crate["name"]] = []
+                for track in self.mixxx_data["crate_tracks"]:
+                    if track["crate_id"] == crate["id"]:
+                        self.crates[crate["name"]].append(track["track_id"])
 
     def fix_values(self, track):
-        self.logger.debug("Fixing values for compatibility...")
-
         # Filetype
-        if track['filetype'] == 'flac':
-            track['filetype'] = 'FLAC File'
+        if track["filetype"] == "flac":
+            track["filetype"] = "FLAC File"
 
         # Filepath
-        track['location'] = "file://localhost/" + track['location'].replace(' ', '%20')
+        track["location"] = "file://localhost/" + track["location"].replace(" ", "%20")
 
         # Round duration to nearest second
-        track['duration'] = str(round(track['duration']))
+        track["duration"] = str(round(track["duration"]))
 
         # Format date to YYYY-MM-DD
-        track['datetime_added'] = track['datetime_added'][:10]
+        track["datetime_added"] = track["datetime_added"][:10]
 
         # Standardise key
-        if track['key'] != '':
-            track['key'] = self.KEY_MAP[track['key']]
+        if track["key"] != "":
+            track["key"] = self.KEY_MAP[track["key"]]
 
         # Round BPM to 2 decimal places
-        if track['bpm']:
-            track['bpm'] = round(track['bpm'], 2)
+        if track["bpm"]:
+            track["bpm"] = round(track["bpm"], 2)
 
         # Map rating
-        if track['rating']:
-            track['rating'] = self.RATING_MAP[track['rating']]
+        if track["rating"]:
+            track["rating"] = self.RATING_MAP[track["rating"]]
         else:
-            track['rating'] = 0
+            track["rating"] = 0
 
         # Genre
-        if not track['genre']:
-            track['genre'] = ""
+        if not track["genre"]:
+            track["genre"] = ""
 
         # Map colour
-        if track.get('color'):
-            track['grouping'] = self.classify_rgb(*self.decimal_to_rgb(track['color']))[0]
-            track['color'] = self.classify_rgb(*self.decimal_to_rgb(track['color']))[1]
+        if track.get("color"):
+            track["grouping"] = self.classify_rgb(*self.decimal_to_rgb(track["color"]))[0]
+            track["color"] = self.classify_rgb(*self.decimal_to_rgb(track["color"]))[1]
         else:
-            track['grouping'] = ""
+            track["grouping"] = ""
         
-        # Fields that Mixxx doesn't store
-        track['discnumber'] = 0
-        track['composer'] = ""
-        track['remixer'] = ""
-        track['label'] = ""
-        track['mix'] = ""
+        # Fields that Mixxx doesn"t store
+        track["discnumber"] = 0
+        track["composer"] = ""
+        track["remixer"] = ""
+        track["label"] = ""
+        track["mix"] = ""
 
     def adjust_cue_time(self, samples, channels, samplerate):
         return "{:.3f}".format(samples / channels / samplerate)
@@ -442,7 +432,6 @@ class Boxxxer:
         return "Unknown"
 
     def parse_mixxx_beats(self, track):
-        self.logger.debug("Parsing beat information...")
         beats_blob = track.get("beats")
         beats_version = track.get("beats_version", "")
         samplerate = track.get("samplerate")
@@ -480,4 +469,4 @@ class Boxxxer:
                 self.logger.warning(f"Failed to parse BeatGrid: {e}")
 
         if beat_times:
-            track['beats'] = beat_times
+            track["beats"] = beat_times

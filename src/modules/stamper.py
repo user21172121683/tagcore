@@ -1,6 +1,8 @@
 from utils import *
 from mutagen.flac import FLAC
 import time
+import threading
+
 
 class Stamper:
     """
@@ -8,55 +10,46 @@ class Stamper:
     """
 
     def __init__(self, **config):
-        # Setup logger
-        self.logger = config.get('logger')
-
-        # Stop flag (for safe quitting)
-        self.stop_flag = config.get("stop_flag")
+        # Setup technical stuff
+        self.logger = get_config(config, "logger", expected_type=logging.Logger, optional=True, default=None)
+        self.max_workers = get_config(config, "max_workers", expected_type=int, optional=True, default=4)
+        self.stop_flag = get_config(config, "stop_flag", expected_type=Event, optional=True, default=None)
+        self.lock = threading.Lock()
 
         # Load configuration
-        self.main_dir = Path(config.get('main_dir'))
-        if not isinstance(self.main_dir, Path):
-            raise TypeError("Expected 'main_dir' to be a path-like object.")
+        self.dry_run = get_config(config,"dry_run", expected_type=bool, optional=True, default=True)
+        self.main_dir = Path(get_config(config, "main_dir", expected_type=str, optional=False, default=None))
+        self.stamps = {k.upper(): v for k, v in get_config(config, "stamps", expected_type=dict[str, str], optional=True, default={})}
 
-        self.dry_run = config.get('dry_run', True)
-        if not isinstance(self.dry_run, bool):
-            raise TypeError("'dry_run' must be a boolean.")
-
-        stamps = config.get('stamps', {})
-        if not isinstance(stamps, dict):
-            raise TypeError("'stamps' must be a dictionary.")
-        self.stamps = {k.upper(): v for k, v in stamps.items()}
-
-        # Stats
+        # Initialise indices
         self.files = []
         self._files_processed = []
         self._files_stamped = []
+        self._files_failed = []
     
     def run(self):
         # Start timer
-        self.start_time = time.time()
+        start = time.time()
 
         # Build index
-        self.files = index_files(directory=self.main_dir, extension='flac', logger=self.logger)
+        self.files = index_files(directory=self.main_dir, extension="flac", logger=self.logger)
 
-        # Process each FLAC file
-        for file in self.files:
-            if check_stop(self.stop_flag, self.logger):
-                break
-            self._files_processed.append(file)
-            self.logger.info(processing_message(len(self._files_processed), len(self.files), file))
-            try:
-                audio = FLAC(file)
-            except Exception as e:
-                self.logger.error(f"Failed to load FLAC file {file}: {e}")
-                continue
-            self.stamp_file(file, audio)
+        # Process FLAC files in parallel
+        parallel_map(
+            func=self.stamp_file,
+            items_with_args=self.files,
+            max_workers=self.max_workers,
+            stop_flag=self.stop_flag,
+            logger=self.logger,
+            description="Stamping",
+            unit="files"
+        )
         
         # Final summary
         summary_items = [
             (self._files_processed, "Processed {} files."),
-            (self._files_stamped, "Stamped {} files.")
+            (self._files_stamped, "Stamped {} files."),
+            (self._files_failed, "Failed to process {} files.")
         ]
 
         self.logger.info(
@@ -64,12 +57,21 @@ class Stamper:
                 name="Flagger",
                 summary_items=summary_items,
                 dry_run=self.dry_run,
-                elapsed=time.time() - self.start_time
+                elapsed=time.time() - start
             )
         )
 
-    def stamp_file(self, file: Path, audio: FLAC):
-        if not self.stamps or self.dry_run:
+    def stamp_file(self, file: Path):
+        if not self.stamps:
+            return
+        with self.lock:
+            self._files_processed.append(file)
+        try:
+            audio = FLAC(file)
+        except Exception as e:
+            self.logger.error(f"Failed to load FLAC file {file}: {e}")
+            with self.lock:
+                self._files_failed.append(file)
             return
 
         # Map existing tags to upper-case keys for case-insensitive lookup
@@ -86,22 +88,23 @@ class Stamper:
             # Get current tag values (empty if not present)
             current_values = audio.get(real_key, [])
 
-            # Sort both for comparison (order doesn't matter)
+            # Sort both for comparison (order doesn"t matter)
             if sorted(current_values) != sorted(desired_values):
-                self.logger.info(dry_run_message(self.dry_run, f"Updating {real_key.upper()}: current = {current_values}, desired = {desired_values}"))
-                if not self.dry_run:
-                    try:
-                        audio[real_key] = desired_values
-                        changed = True
-                    except Exception as e:
-                        self.logger.warning(f"Failed to update {real_key}: {e}")
-            else:
-                self.logger.debug(f"{real_key.upper()} already matches desired values.")
+                try:
+                    audio[real_key] = desired_values
+                    changed = True
+                except Exception as e:
+                    self.logger.warning(f"{file}: Failed to update {real_key}: {e}")
+                    with self.lock:
+                        self._files_failed.append(file)
 
         if changed:
-            self._files_stamped.append(file)
+            with self.lock:
+                self._files_stamped.append(file)
             if not self.dry_run:
                 try:
                     audio.save()
                 except Exception as e:
-                    self.logger.error(f"Failed to save stamped metadata for {file.name}: {e}")
+                    self.logger.error(f"{file}: Failed to save stamped metadata: {e}")
+                    with self.lock:
+                        self._files_failed.append(file)

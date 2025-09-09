@@ -5,26 +5,32 @@ from pathlib import Path
 from threading import Event
 import shutil
 from datetime import timedelta
+from tqdm import tqdm
+from typing import *
+from concurrent.futures import ThreadPoolExecutor, Executor, as_completed
 
 
+# Constants
+DATA_DIR = Path(__file__).resolve().parents[1] / "data"
+LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
+
+
+# Utility functions
 def index_files(
     directory: Path,
     extension: str,
     logger: logging.Logger
 ) -> list[Path]:
-    log_dir = Path(__file__).resolve().parent / "logs" / datetime.now().strftime('%Y-%m-%d')
-    log_dir.mkdir(parents=True, exist_ok=True)
-
-    logger.info(f"Indexing {extension} files in {directory.resolve()}...")
+    logger.info(f"Indexing {extension.upper()} files in {directory.resolve()}...")
     try:
-        files = list(directory.rglob(f'*.{extension.lower()}'))
+        files = list(directory.rglob(f"*.{extension.lower()}"))
         if not files:
-            logger.info(f"No {extension} files found.")
+            logger.info(f"No {extension.upper()} files found.")
         else:
-            logger.info(f"Found {len(files)} {extension} files.")
+            logger.info(f"Found {len(files)} {extension.upper()} files.")
         return files
     except FileNotFoundError:
-        logger.critical(f"Main directory '{directory.resolve()}' not found. Exiting.")
+        logger.critical(f"Main directory {directory.resolve()} not found. Exiting.")
         return []
 
 
@@ -38,33 +44,33 @@ def setup_logger(
     def get_level(level_str: str) -> int:
         level_str = level_str.upper()
         levels = {
-            'DEBUG': logging.DEBUG,
-            'INFO': logging.INFO,
-            'WARNING': logging.WARNING,
-            'ERROR': logging.ERROR,
-            'CRITICAL': logging.CRITICAL,
+            "DEBUG": logging.DEBUG,
+            "INFO": logging.INFO,
+            "WARNING": logging.WARNING,
+            "ERROR": logging.ERROR,
+            "CRITICAL": logging.CRITICAL,
         }
         return levels.get(level_str, logging.INFO)  # Default INFO if invalid
 
     # Colorful console formatter
     class ColorFormatter(logging.Formatter):
         COLORS = {
-            'DEBUG': '\033[96m',
-            'INFO': '\033[92m',
-            'WARNING': '\033[93m',
-            'ERROR': '\033[91m',
-            'CRITICAL': '\033[95m',
-            'RESET': '\033[0m'
+            "DEBUG": "\033[96m",
+            "INFO": "\033[92m",
+            "WARNING": "\033[93m",
+            "ERROR": "\033[91m",
+            "CRITICAL": "\033[95m",
+            "RESET": "\033[0m"
         }
 
         def format(self, record):
             color = self.COLORS.get(
-                record.levelname, self.COLORS['RESET'])
+                record.levelname, self.COLORS["RESET"])
             message = super().format(record)
-            return f"{color}{message}{self.COLORS['RESET']}"
+            return f"{color}{message}{self.COLORS["RESET"]}"
 
     # Setup log directory and file paths
-    log_dir = Path(__file__).resolve().parents[1] / "logs" / datetime.now().strftime('%Y-%m-%d')
+    log_dir = LOG_DIR / datetime.now().strftime("%Y-%m-%d")
     log_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / f"{name}.log"
     archive_dir = log_dir / "archive"
@@ -72,7 +78,7 @@ def setup_logger(
 
     # Check if a log file with the same name exists and move it to archive
     if log_file.exists():
-        archive_file = archive_dir / f"{name}_{datetime.now().strftime('%H-%M-%S')}.log"
+        archive_file = archive_dir / f"{name}_{datetime.now().strftime("%H-%M-%S")}.log"
         shutil.move(str(log_file), str(archive_file))
         print(f"Moved existing log file to archive: {archive_file}")
 
@@ -98,18 +104,143 @@ def setup_logger(
     logger.addHandler(file_handler)
     logger.propagate = False
 
-    logger.info(f"\n{'-'*100}\nStarting {name}...\n{'-'*100}")
+    logger.info(f"\n{"-"*100}\nStarting {name}...\n{"-"*100}")
 
     return logger
 
 
-def processing_message(current: int, total: int, file: Path, elapsed: float | None = None) -> str:
-    return f"[{current}/{total}{f' | {str(timedelta(seconds=elapsed))[:-3]}' if elapsed else ''}] Processing: {file}"
+def parallel_map(
+    func: Callable,
+    items_with_args: List[Any],
+    *,
+    executor_type: Type[Executor] = ThreadPoolExecutor,
+    max_workers: int = 4,
+    logger: Optional[Any] = None,
+    stop_flag: Optional[Any] = None,
+    description: Optional[str] = "Processing",
+    unit: str = "items"
+) -> List[Any]:
+    """Applies `func` to each item in `items_with_args` in parallel.
+
+    Each item should be either:
+        - A tuple of positional arguments, or
+        - A tuple of (positional_args, keyword_args)
+    Logs activity using logger or print.
+    Returns results in the original order.
+    """
+
+    def get_item_name(args) -> str:
+        """Get the display name of the task from its arguments."""
+        if isinstance(args, tuple):
+            return str(args[0]) if args else "Unknown"
+        return str(args)
+
+    results = [None] * len(items_with_args)
+    futures = {}
+    submitted_futures = []
+
+    with executor_type(max_workers=max_workers) as executor:
+        for index, args in enumerate(items_with_args):
+            if stop_flag and check_stop(stop_flag, logger):
+                break
+
+            # Unpack arguments (positional and optional keyword arguments)
+            if isinstance(args, tuple):
+                if len(args) == 2 and isinstance(args[1], dict):
+                    pos_args, kw_args = args
+                else:
+                    pos_args, kw_args = args, {}
+            else:
+                pos_args, kw_args = (args,), {}
+
+            future = executor.submit(func, *pos_args, **kw_args)
+            futures[future] = index
+            submitted_futures.append(future)
+
+        try:
+            for future in tqdm(
+                as_completed(submitted_futures),
+                total=len(submitted_futures),
+                desc=description,
+                unit=unit,
+                mininterval=0.2,
+                smoothing=0.1
+            ):
+                if stop_flag and check_stop(stop_flag, logger):
+                    # Cancel any remaining futures that haven"t started
+                    for f in submitted_futures:
+                        if not f.done():
+                            f.cancel()
+                    break
+
+                index = futures[future]
+                try:
+                    results[index] = future.result()
+                except Exception as e:
+                    file = get_item_name(items_with_args[index])
+                    err_msg = (
+                        f"Error {description} on item {index} ({file}): {e}"
+                        if description else f"Error on item {index} ({file}): {e}"
+                    )
+                    if logger:
+                        logger.exception(err_msg)
+                    else:
+                        print(err_msg)
+        finally:
+            executor.shutdown(wait=False)
+
+    return results
+
+
+def get_config(
+    config: Dict[str, Any],
+    key: str,
+    *,
+    expected_type: Type,
+    default: Any = None,
+    optional: bool = False
+) -> Any:
+    value = config.get(key, default)
+
+    if value is None:
+        if optional:
+            return None
+        raise ValueError(f'Missing required config key: "{key}"')
+
+    # Handle generic types like dict[str, str], list[int], etc.
+    origin = get_origin(expected_type)
+    args = get_args(expected_type)
+
+    if origin:
+        if not isinstance(value, origin):
+            raise TypeError(f'"{key}" must be of type {origin.__name__}, got {type(value).__name__}.')
+
+        # Special handling for dicts
+        if origin is dict and len(args) == 2:
+            key_type, val_type = args
+            for k, v in value.items():
+                if not isinstance(k, key_type):
+                    raise TypeError(f'Key in "{key}" must be {key_type.__name__}, got {type(k).__name__}')
+                if not isinstance(v, val_type):
+                    raise TypeError(f'Value in "{key}" must be {val_type.__name__}, got {type(v).__name__}')
+        
+        # Special handling for lists
+        elif origin is list and len(args) == 1:
+            item_type = args[0]
+            for item in value:
+                if not isinstance(item, item_type):
+                    raise TypeError(f'Item in "{key}" must be {item_type.__name__}, got {type(item).__name__}')
+    else:
+        # Non-generic type (e.g. str, int)
+        if not isinstance(value, expected_type):
+            raise TypeError(f'"{key}" must be of type {expected_type.__name__}. Got {type(value).__name__}.')
+
+    return value
 
 
 def summary_message(name: str, summary_items: list[tuple[list, str]], dry_run: bool, elapsed: float | None = None) -> str:
     # Initialise with banner
-    message = banner_message(f"{name} summary")
+    message = banner_message(f"{dry_run_message(dry_run, name)} summary")
 
     # Table to summarise
     if not any(items for items, _ in summary_items):
@@ -117,7 +248,7 @@ def summary_message(name: str, summary_items: list[tuple[list, str]], dry_run: b
     else:
         for items, msg_template in summary_items:
             if items:
-                message += "\n" + dry_run_message(dry_run, msg_template.format(len(items)))
+                message += "\n" + msg_template.format(len(items))
     
     # Total time elapsed
     if elapsed:
@@ -128,20 +259,20 @@ def summary_message(name: str, summary_items: list[tuple[list, str]], dry_run: b
     return message
 
 
-def banner_message(message: str, symbol: str = "-", length: int = 100):
-    return f"\n{symbol*length}\n{message}\n{symbol*length}"
-
-
 def dry_run_message(dry_run: bool, message: str) -> str:
     return f"[DRY RUN] {message}" if dry_run else message
 
 
-def check_stop(stop_flag: Event, logger: logging.Logger) -> bool:
-    """
-    Checks whether the stop_flag is set.
-    If set, logs a message and returns True.
-    """
-    if stop_flag and hasattr(stop_flag, 'is_set') and stop_flag.is_set():
-        logger.warning("Stop flag received. Exiting early.")
+def banner_message(message: str, symbol: str = "-", length: int = 100):
+    return f"\n{symbol*length}\n{message}\n{symbol*length}"
+
+
+def check_stop(stop_flag: Event, logger=None) -> bool:
+    if stop_flag and stop_flag.is_set():
+        message = "Stop flag received. Exiting early."
+        if logger:
+            logger.warning(message)
+        else:
+            print(message)
         return True
     return False

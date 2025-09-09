@@ -2,12 +2,12 @@ General:
   dry_run: false
   main_dir: flac
   username: user21172121683
+  max_workers: 8
   console_level: DEBUG
   file_level: DEBUG
 
 Rymporter:
-  auto_skip: false
-  collection_html: d.rp,albjh,tn,v,o,g,n9999999.html
+  collection: d.rp,albjh,tn,v,o,g,n9999999.html
   field_definitions:
     album_id: RYM_ALBUMID
     album_title: ALBUM
@@ -45,6 +45,7 @@ Flagger:
   timestamp: PROBLEMS_LASTCHECKED
   streamstamp: FLAC_STREAM
   cover_target_size: [1000, 1000]
+  cover_square: True
   cover_allowed_formats:
     - jpeg
   tags_to_check:
@@ -60,7 +61,9 @@ Flagger:
     - ALBUM
     - DATE
     - REPLAYGAIN_ALBUM_GAIN
+    - REPLAYGAIN_ALBUM_PEAK
     - REPLAYGAIN_TRACK_GAIN
+    - REPLAYGAIN_TRACK_PEAK
 
 Ogger:
   ogg_dir: ogg

@@ -3,6 +3,7 @@ import time
 from mutagen.flac import FLAC
 from pathlib import Path
 import subprocess
+import threading
 
 class ReCoder:
     """
@@ -10,26 +11,17 @@ class ReCoder:
     """
 
     def __init__(self, **config):
-        # Setup logger
-        self.logger = config.get('logger')
-
-        # Stop flag (for safe quitting)
-        self.stop_flag = config.get("stop_flag")
+        # Setup technical stuff
+        self.logger = get_config(config, "logger", expected_type=logging.Logger, optional=True, default=None)
+        self.max_workers = get_config(config, "max_workers", expected_type=int, optional=True, default=4)
+        self.stop_flag = get_config(config, "stop_flag", expected_type=Event, optional=True, default=None)
+        self.lock = threading.Lock()
 
         # Load configuration
-        self.main_dir = Path(config['main_dir'])
-
-        self.dry_run = config.get('dry_run', True)
-
-        self.level = config.get('level', None)
-        if self.level is None:
-            raise ValueError("Compression 'level' must be specified in config.")
-        try:
-            self.level = int(self.level)
-        except (TypeError, ValueError):
-            raise ValueError(f"Compression level must be an integer, got {self.level}")
-
-        self.stamp = (config.get('stamp') or '').upper() or None
+        self.dry_run = get_config(config, "dry_run", expected_type=bool, optional=True, default=True)
+        self.main_dir = Path(get_config(config, "main_dir", expected_type=str, optional=False))
+        self.level = get_config(config, "level", expected_type=int, optional=False)
+        self.stamp = get_config(config, "stamp", expected_type=str, optional=True, default=None).upper() or None
 
         # Initialise index
         self.files = []
@@ -37,6 +29,7 @@ class ReCoder:
         # Stats
         self._files_processed = []
         self._files_encoded = []
+        self._files_failed = []
 
     def run(self):
         # Start timer
@@ -48,35 +41,22 @@ class ReCoder:
         if not self.files:
             self.logger.info("No FLAC files found to process.")
             return
-
-        # Process each file
-        for file in self.files:
-            if check_stop(self.stop_flag, self.logger):
-                break
-            try:
-                self._files_processed.append(file)
-                self.logger.info(
-                    processing_message(
-                        current=len(self._files_processed),
-                        total=len(self.files),
-                        file=file,
-                        elapsed=time.time() - self.start_time
-                    )
-                )
-                audio = FLAC(file)
-                if self._check_necessity(audio):
-                    self.logger.info(dry_run_message(self.dry_run, "Re-compressing FLAC file..."))
-                    if not self.dry_run:
-                        self._encode(file, audio)
-                else:
-                    self.logger.debug("No re-compression necessary!")
-            except Exception as e:
-                self.logger.error(f"Failed processing {file}: {e}")
+        
+        # Process FLAC files in parallel
+        parallel_map(
+            func=self._process_file,
+            items_with_args=self.files,
+            max_workers=self.max_workers,
+            stop_flag=self.stop_flag,
+            logger=self.logger,
+            description="Re-coding",
+            unit="files"
+        )
 
         # Final summary
         summary_items = [
             (self._files_processed, "Processed {} FLAC files."),
-            (self._files_encoded, "Re-compressed {} FLAC files.")
+            (self._files_encoded, "Re-encoded {} FLAC files.")
         ]
 
         self.logger.info(
@@ -87,6 +67,17 @@ class ReCoder:
                 elapsed=time.time() - self.start_time
             )
         )
+
+    def _process_file(self, file: Path):
+        try:
+            with self.lock:
+                self._files_processed.append(file)
+            audio = FLAC(file)
+            if self._check_necessity(audio):
+                if not self.dry_run:
+                    self._encode(file, audio)
+        except Exception as e:
+            self.logger.error(f"Failed processing {file}: {e}")
 
     def _check_necessity(self, audio: FLAC) -> bool:
         if self.stamp:
@@ -116,12 +107,10 @@ class ReCoder:
             file.replace(backup_file)
 
             # Decode FLAC to WAV
-            self.logger.debug("Decoding to WAV...")
             decode_cmd = ['flac', '-d', '-f', str(backup_file), '-o', str(temp_wav), '-s']
             subprocess.run(decode_cmd, check=True)
 
             # Re-encode WAV to FLAC
-            self.logger.debug(f"Re-encoding to compression level {self.level}...")
             encode_cmd = ['flac', f'-{self.level}', '-f', str(temp_wav), '-o', str(output_file), '-s']
             subprocess.run(encode_cmd, check=True)
 
@@ -136,31 +125,27 @@ class ReCoder:
             # Optionally add stamp
             if self.stamp:
                 reencoded_audio[self.stamp] = [str(self.level)]
-                self.logger.debug(dry_run_message(self.dry_run, "Applied level stamp."))
 
             reencoded_audio.save()
 
             # Replace original with re-encoded version
             output_file.replace(file)
-            self.logger.info("Re-encoded and replaced!")
 
-            self._files_encoded.append(file)
+            with self.lock:
+                self._files_encoded.append(file)
 
             # Cleanup backup after success
             if backup_file.exists():
                 backup_file.unlink()
 
-        except subprocess.CalledProcessError as e:
-            self.logger.error(f"Subprocess failed: {e}")
-            self._rollback(file, backup_file)
         except Exception as e:
             self.logger.error(f"Encoding failed for {file.name}: {e}")
             self._rollback(file, backup_file)
+            self._files_failed.append[file]
         finally:
             if temp_wav.exists():
                 try:
                     temp_wav.unlink()
-                    self.logger.debug("Temporary WAV file removed.")
                 except Exception as e:
                     self.logger.warning(f"Failed to remove temporary WAV file: {e}")
 
@@ -169,6 +154,5 @@ class ReCoder:
         if backup_file.exists():
             try:
                 backup_file.replace(file)
-                self.logger.info(f"Rolled back to original file: {file.name}")
             except Exception as e:
                 self.logger.error(f"Failed to restore original file from backup: {e}")

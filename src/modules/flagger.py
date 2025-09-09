@@ -6,6 +6,7 @@ from utils import *
 from pathlib import Path
 from datetime import datetime
 import time
+import threading
 
 
 class Flagger:
@@ -14,29 +15,34 @@ class Flagger:
     """
     
     def __init__(self, **config):
-        # Setup logger
-        self.logger = config.get('logger')
-
-        # Stop flag (for safe quitting)
-        self.stop_flag = config.get("stop_flag")
+        # Setup technical stuff
+        self.logger = get_config(config, "logger", expected_type=logging.Logger, optional=True, default=None)
+        self.max_workers = get_config(config, "max_workers", expected_type=int, optional=True, default=4)
+        self.stop_flag = get_config(config, "stop_flag", expected_type=Event, optional=True, default=None)
+        self.lock = threading.Lock()
 
         # Load configuration
-        self.main_dir = Path(config.get('main_dir'))
-        self.tags_to_check = config.get('tags_to_check', [])
-        self.problems_field = config.get('problems_field', 'PROBLEMS')
-        self.timestamp = config.get('timestamp', None)
-        self.streamstamp = config.get('streamstamp', None)
-        self.cover_target_size = tuple(config.get('cover_target_size', [1000, 1000]))
-        self.cover_allowed_formats = {fmt.lower() for fmt in config.get('cover_allowed_formats', ['jpg', 'jpeg'])}
-        self.skip_integrity_check = config.get('skip_integrity_check', False)
-        self.dry_run = config.get('dry_run', True)
+        self.dry_run = get_config(config, "dry_run", expected_type=bool, optional=True, default=True)
+        self.main_dir = Path(get_config(config, "main_dir", expected_type=str, optional=False))
+        self.tags_to_check = get_config(config, "tags_to_check", expected_type=list[str], optional=False)
+        self.problems_field = get_config(config, "problems_field", expected_type=str, optional=True, default="PROBLEMS")
+        self.timestamp = get_config(config, "timestamp", expected_type=str, optional=True, default=None)
+        self.streamstamp = get_config(config, "streamstamp", expected_type=str, optional=True, default=None)
+        self.cover_target_size = tuple(get_config(config, "cover_target_size", expected_type=list[int, int], optional=True, default=None))
+        self.cover_square = get_config(config, "cover_square", expected_type=bool, optional=True, default=False)
+        self.cover_allowed_formats = {fmt.lower() for fmt in get_config(config, "cover_allowed_formats", expected_type=list[str], optional=True, default=None)}
+        self.skip_integrity_check = get_config(config, "skip_integrity_check", expected_type=bool, optional=True, default=False)
 
-        # Stats
+        # Initialise indices
         self.files = []
         self._files_processed = []
         self._files_flagged = {}
         self._files_flagged_already = []
         self._files_failed = []
+
+        # Constants
+        self.CORRUPTED = "CORRUPTED STREAM"
+        self.OK = "OK"
     
     def run(self):
         # Start timer
@@ -45,27 +51,17 @@ class Flagger:
         # Build indices
         self.files = index_files(directory=self.main_dir, extension='flac', logger=self.logger)
 
-        # Process each FLAC file
-        for file in self.files:
-            if check_stop(self.stop_flag, self.logger):
-                break
-            self._files_processed.append(file)
-            self.logger.info(
-                processing_message(
-                    current=len(self._files_processed),
-                    total=len(self.files),
-                    file=file,
-                    elapsed=time.time() - self.start_time
-                )
-            )
-            try:
-                audio = FLAC(file)
-                self.check_problems(file, audio)
-                self.document_problems(file, audio)
-            except Exception as e:
-                self.logger.error(f"Failed to process {file}: {e}")
-                self._files_failed.append(file)
-                continue
+        # Process files
+        self.logger.info("Flagging problematic files...")
+        parallel_map(
+            func=self._process_file,
+            items_with_args=self.files,
+            max_workers=self.max_workers,
+            stop_flag=self.stop_flag,
+            logger=self.logger,
+            description=dry_run_message(self.dry_run, "Flagging"),
+            unit="files"
+        )
 
         # Final summary
         summary_items = [
@@ -84,47 +80,49 @@ class Flagger:
             )
         )
 
-    def check_problems(self, file: Path, audio: FLAC):
-        self.check_integrity(file, audio)
-        self.check_tags(file, audio)
-        self.check_cover(file, audio)
+    def _process_file(self, file: Path):
+        with self.lock:
+            self._files_processed.append(file)
+        try:
+            audio = FLAC(file)
+            self.check_integrity(file, audio)
+            self.check_tags(file, audio)
+            self.check_cover(file, audio)
+            self.document_problems(file, audio)
+        except Exception:
+            with self.lock:
+                self._files_failed.append(file)
+            return
     
     def document_problems(self, file: Path, audio: FLAC):
         problems = self._files_flagged.get(file, [])
-        if self.streamstamp and "CORRUPTED STREAM" not in problems and not self.dry_run:
-            if audio.get(self.streamstamp, []) != ["OK"]:
-                audio[self.streamstamp] = "OK"
+        if self.streamstamp and self.CORRUPTED not in problems and not self.dry_run:
+            if audio.get(self.streamstamp, []) != [self.OK]:
+                audio[self.streamstamp] = self.OK
                 audio.save()
-                self.logger.debug(f"Streamstamp {self.streamstamp}=OK added.")
         if problems:
             if sorted(problems) == sorted(audio.get(self.problems_field, [])):
-                self._files_flagged_already.append(file)
-                self.logger.debug(f"Problems already recorded in {self.problems_field}.")
+                with self.lock:
+                    self._files_flagged_already.append(file)
             else:
                 if not self.dry_run:
                     audio[self.problems_field] = problems
                     if self.timestamp:
                         audio[self.timestamp] = datetime.now().strftime('%Y-%m-%d')
-                        self.logger.debug(f"Timestamp added to {self.timestamp}.")
                     audio.save()
-                    self.logger.debug(dry_run_message(self.dry_run, f"Problems saved to {self.problems_field}."))
         else:
             if not self.dry_run:
                 if audio.get(self.problems_field, []):
                     audio[self.problems_field] = []
                     audio.save()
-            self.logger.debug("No problems found.")
 
     def check_integrity(self, file: Path, audio: FLAC):
         if self.skip_integrity_check:
-            self.logger.debug("Skipping integrity check.")
             return
 
-        if self.streamstamp and audio.get(self.streamstamp, []) == ["OK"]:
-            self.logger.debug(f"Streamstamp {self.streamstamp}=OK found — skipping integrity check.")
+        if self.streamstamp and audio.get(self.streamstamp, []) == [self.OK]:
             return
 
-        self.logger.debug("Checking integrity...")
         try:
             result = subprocess.run(
                 ["flac", "-t", str(file)],
@@ -132,57 +130,48 @@ class Flagger:
                 stderr=subprocess.PIPE,
                 text=True
             )
-            if result.returncode == 0:
-                self.logger.debug("OK!")
-            else:
-                self.logger.warning(f"FAILED: {result.stderr.strip()}")
-                self._files_flagged.setdefault(file, []).append("CORRUPTED STREAM")
+            if result.returncode != 0:
+                self._files_flagged.setdefault(file, []).append(self.CORRUPTED)
         except FileNotFoundError:
             self.logger.critical("The 'flac' command is not found. Please install the FLAC utility.")
 
     def check_tags(self, file: Path, audio: FLAC):
-        self.logger.debug("Checking for empty or missing tags...")
         if not self.tags_to_check:
             return
         for tag in self.tags_to_check:
             if tag not in audio or not audio[tag]:
-                self.logger.warning(f"Field {tag.upper()} is missing or empty.")
                 self._files_flagged.setdefault(file, []).append(f"NO {tag.upper()}")
         return
 
     def check_cover(self, file: Path, audio: FLAC):
-        self.logger.debug("Checking cover image...")
         pictures = audio.pictures
         if not pictures:
-            self.logger.warning("No cover image found.")
-            self._files_flagged.setdefault(file, []).append("NO COVER")
+            with self.lock:
+                self._files_flagged.setdefault(file, []).append("NO COVER")
             return
         if len(pictures) > 1:
-            self.logger.warning(f"{len(pictures)} cover images found, analysing only the first one.")
-            self._files_flagged.setdefault(file, []).append("MULTIPLE COVERS")
+            with self.lock:
+                self._files_flagged.setdefault(file, []).append("MULTIPLE COVERS")
 
         pic = pictures[0]
         image_data = pic.data
         try:
             with Image.open(io.BytesIO(image_data)) as image:
                 if (image.size[0] != self.cover_target_size[0]) or (image.size[1] != self.cover_target_size[1]):
-                    if image.size[0] != image.size[1]:
-                        self.logger.warning(f"Cover image is not square: {image.size}.")
-                        self._files_flagged.setdefault(file, []).append("COVER NOT SQUARE")
-                    if image.size[0] < self.cover_target_size[0] and image.size[1] < self.cover_target_size[1]:
-                        self.logger.warning(f"Cover image is smaller than target size: {image.size} < {self.cover_target_size}.")
-                        self._files_flagged.setdefault(file, []).append("COVER TOO SMALL")
-                    if image.size[0] > self.cover_target_size[0] and image.size[1] > self.cover_target_size[1]:
-                        self.logger.warning(f"Cover image is larger than target size: {image.size} > {self.cover_target_size}.")
-                        self._files_flagged.setdefault(file, []).append("COVER TOO LARGE")
-                else:
-                    self.logger.debug(f"Cover image size matches target size: {image.size} = {self.cover_target_size}.")
+                    if self.cover_square:
+                            with self.lock:
+                                self._files_flagged.setdefault(file, []).append("COVER NOT SQUARE")
+                    if self.cover_target_size:
+                        if image.size[0] < self.cover_target_size[0] and image.size[1] < self.cover_target_size[1]:
+                            with self.lock:
+                                self._files_flagged.setdefault(file, []).append("COVER TOO SMALL")
+                        if image.size[0] > self.cover_target_size[0] and image.size[1] > self.cover_target_size[1]:
+                            with self.lock:
+                                self._files_flagged.setdefault(file, []).append("COVER TOO LARGE")
                 if image.format.lower() not in self.cover_allowed_formats:
-                    self.logger.warning(f"Cover image format {image.format} is not allowed.")
-                    self._files_flagged.setdefault(file, []).append("COVER WRONG FORMAT")
-                else:
-                    self.logger.debug(f"Cover image format {image.format} is allowed.")
-        except Exception as e:
-            self.logger.warning(f"Could not access cover: {e}")
-            self._files_flagged.setdefault(file, []).append("COVER ACCESS ERROR")
+                    with self.lock:
+                        self._files_flagged.setdefault(file, []).append("COVER WRONG FORMAT")
+        except Exception:
+            with self.lock:
+                self._files_flagged.setdefault(file, []).append("COVER ACCESS ERROR")
         return
