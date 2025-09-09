@@ -410,7 +410,9 @@ class Boxxxer:
                     with playlist_file.open("w", encoding="utf-8") as f:
                         f.write("#EXTM3U\n")
                         for track in tracks:
-                            f.write(f"{track}\n")
+                            for file in self.mixxx_data["track_locations"]:
+                                if track == file["id"]:
+                                    f.write(f"{file['location']}\n")
 
     def fix_values(self, track):
         # Filetype
