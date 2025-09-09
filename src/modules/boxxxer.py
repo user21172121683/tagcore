@@ -20,6 +20,8 @@ class Boxxxer:
         self.mixxx_db = DATA_DIR / get_config(config, "mixxx_db", expected_type=str, optional=False)
         self.output = DATA_DIR / get_config(config, "output", expected_type=str, optional=True, default="rekordbox.xml")
         self.hot_to_memory = get_config(config, "hot_to_memory", expected_type=bool, optional=True, default=False)
+        playlist_dir_str = get_config(config, "playlist_dir", expected_type=str, optional=True, default=None)
+        self.playlist_dir = Path(playlist_dir_str) if playlist_dir_str else None
 
         # Initialise indices
         self.mixxx_data = {}
@@ -157,6 +159,9 @@ class Boxxxer:
 
             # Build XML
             self.build_xml()
+
+            # Export playlists and crates
+            self.export_playlists_and_crates()
 
             # Final summary
             summary_items = [
@@ -355,6 +360,34 @@ class Boxxxer:
                 for track in self.mixxx_data["crate_tracks"]:
                     if track["crate_id"] == crate["id"]:
                         self.crates[crate["name"]].append(track["track_id"])
+
+    def export_playlists_and_crates(self):
+        if not self.dry_run and self.playlist_dir:
+            self.playlist_dir.mkdir(parents=True, exist_ok=True)
+
+            # Define collections and their corresponding subdirectories
+            subdirs = {
+                "Playlists": self.playlists,
+                "Crates": self.crates,
+            }
+
+            for subdir_name, collection in subdirs.items():
+                if not collection:
+                    continue
+
+                for name, tracks in collection.items():
+                    if not tracks:
+                        continue
+
+                    subdir_path = self.playlist_dir / subdir_name
+                    subdir_path.mkdir(parents=True, exist_ok=True)
+
+                    playlist_file = subdir_path / f"{name.replace(' ', '_')}.m3u8"
+
+                    with playlist_file.open("w", encoding="utf-8") as f:
+                        f.write("#EXTM3U\n")
+                        for track in tracks:
+                            f.write(f"{track}\n")
 
     def fix_values(self, track):
         # Filetype
