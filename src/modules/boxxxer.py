@@ -3,6 +3,7 @@ import xml.etree.ElementTree as ET
 import time
 from utils import *
 import modules._beats_pb2 as _beats_pb2
+from statistics import mean
 
 
 class Boxxxer:
@@ -207,22 +208,44 @@ class Boxxxer:
             track_element = ET.SubElement(collection, "TRACK", track_attribs)
 
             if track.get("color"):
-                track_element.set(
-                    "Colour",
-                    track.get("color")
-                )
+                track_element.set("Colour", track.get("color"))
 
-            # TEMPO
             if track["beats"]:
-                for i, beat in enumerate(track["beats"]):
-                    ET.SubElement(
-                        track_element,
-                        "TEMPO",
-                        Inizio=str(beat),
-                        Bpm=str(round(track["bpm"], 2)),
-                        Metro="4/4",
-                        Battito=str((i % 4) + 1)
-                    )
+                beats = track["beats"]
+                window_size = 8
+                if len(beats) > 1:
+                    # Calculate intervals between beats
+                    intervals = [beats[i+1] - beats[i] for i in range(len(beats) - 1)]
+
+                    # Calculate instantaneous BPMs
+                    instant_bpms = [60 / interval if interval > 0 else 0 for interval in intervals]
+
+                    # Pad last value so we have the same length as beats
+                    instant_bpms.append(instant_bpms[-1])
+
+                    # Compute sliding window BPMs
+                    bpm_values = []
+                    for i in range(len(instant_bpms)):
+                        window = instant_bpms[max(0, i - window_size + 1): i + 1]
+                        bpm_values.append(round(mean(window), 2))
+                else:
+                    # Fallback if there's only one beat
+                    bpm_values = [str(round(track["bpm"], 2))]
+
+                # Step 5: Add TEMPO elements to XML
+                last_bpm = None
+                for i, beat in enumerate(beats):
+                    current_bpm = bpm_values[i]
+                    if current_bpm != last_bpm:
+                        ET.SubElement(
+                            track_element,
+                            "TEMPO",
+                            Inizio=str(beat),
+                            Bpm=str(current_bpm),
+                            Metro="4/4",
+                            Battito=str((i % 4) + 1)
+                        )
+                        last_bpm = current_bpm
 
             # CUES
             if track.get("cues", None):
@@ -482,7 +505,7 @@ class Boxxxer:
 
                 for beat in beats_proto.beat:
                     frame_position = beat.frame_position
-                    time_seconds = self.adjust_beat_time(frame_position, samplerate, bpm)
+                    time_seconds = float(self.adjust_beat_time(frame_position, samplerate, bpm))
                     beat_times.append(time_seconds)
 
             except Exception as e:
@@ -495,7 +518,7 @@ class Boxxxer:
 
                 if beats_proto.HasField("first_beat"):
                     frame_position = beats_proto.first_beat.frame_position
-                    time_seconds = self.adjust_beat_time(frame_position, samplerate, bpm)
+                    time_seconds = float(self.adjust_beat_time(frame_position, samplerate, bpm))
                     beat_times.append(time_seconds)
 
             except Exception as e:
