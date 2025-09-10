@@ -184,3 +184,6 @@ Boxxxer:
   output: rekordbox.xml
   hot_to_memory: True
   playlist_dir: m3u8
+
+Lister:
+  filename: album
