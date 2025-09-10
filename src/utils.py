@@ -245,6 +245,32 @@ def get_config(
     return value
 
 
+class UpperFLAC:
+    def __init__(self, flac):
+        self._flac = flac
+
+    def __getitem__(self, key):
+        return self._flac[key.upper()]
+
+    def __setitem__(self, key, value):
+        self._flac[key.upper()] = value
+
+    def get(self, key, default=None):
+        return self._flac.get(key.upper(), default)
+
+    def keys(self):
+        return [k.upper() for k in self._flac.keys()]
+
+    def __contains__(self, key):
+        return key.upper() in self._flac
+
+    def save(self):
+        self._flac.save()
+
+    def __getattr__(self, attr):
+        return getattr(self._flac, attr)
+
+
 def summary_message(name: str, summary_items: list[tuple[list, str]], dry_run: bool, elapsed: float | None = None) -> str:
     # Initialise with banner
     message = banner_message(f"{dry_run_message(dry_run, name)} summary")
