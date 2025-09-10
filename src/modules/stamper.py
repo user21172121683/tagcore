@@ -19,12 +19,14 @@ class Stamper:
         # Load configuration
         self.dry_run = get_config(config,"dry_run", expected_type=bool, optional=True, default=True)
         self.main_dir = Path(get_config(config, "main_dir", expected_type=str, optional=False, default=None))
-        self.stamps = {k.upper(): v for k, v in get_config(config, "stamps", expected_type=dict[str, str], optional=True, default={})}
+        self.stamps = {k.upper(): v for k, v in get_config(config, "stamps", expected_type=dict[str, str], optional=True, default={}).items()}
+        self.map = {k.upper(): v.upper() for k, v in get_config(config, "map", expected_type=dict[str, str], optional=True, default={}).items()}
+        self.clear_source = get_config(config, "clear_source", expected_type=bool, optional=True, default=False)
 
         # Initialise indices
         self.files = []
         self._files_processed = []
-        self._files_stamped = []
+        self._files_modified = []
         self._files_failed = []
     
     def run(self):
@@ -36,7 +38,7 @@ class Stamper:
 
         # Process FLAC files in parallel
         parallel_map(
-            func=self.stamp_file,
+            func=self.process_file,
             items_with_args=self.files,
             max_workers=self.max_workers,
             stop_flag=self.stop_flag,
@@ -48,7 +50,7 @@ class Stamper:
         # Final summary
         summary_items = [
             (self._files_processed, "Processed {} files."),
-            (self._files_stamped, "Stamped {} files."),
+            (self._files_modified, "Modified {} files."),
             (self._files_failed, "Failed to process {} files.")
         ]
 
@@ -61,46 +63,30 @@ class Stamper:
             )
         )
 
-    def stamp_file(self, file: Path):
-        if not self.stamps:
+    def process_file(self, file: Path):
+        if not self.stamps and not self.map:
             return
         with self.lock:
             self._files_processed.append(file)
         try:
-            audio = FLAC(file)
+            audio = UpperFLAC(FLAC(file))
         except Exception as e:
             self.logger.error(f"Failed to load FLAC file {file}: {e}")
             with self.lock:
                 self._files_failed.append(file)
             return
 
-        # Map existing tags to upper-case keys for case-insensitive lookup
-        existing_keys = {k.upper(): k for k in audio.keys()}
         changed = False
 
-        for tag, value in self.stamps.items():
-            tag_upper = tag.upper()
-            real_key = existing_keys.get(tag_upper, tag_upper)
+        if self.map_tags(audio):
+            changed = True
 
-            # Normalize configured value to a list
-            desired_values = value if isinstance(value, list) else [value]
-
-            # Get current tag values (empty if not present)
-            current_values = audio.get(real_key, [])
-
-            # Sort both for comparison (order doesn"t matter)
-            if sorted(current_values) != sorted(desired_values):
-                try:
-                    audio[real_key] = desired_values
-                    changed = True
-                except Exception as e:
-                    self.logger.warning(f"{file}: Failed to update {real_key}: {e}")
-                    with self.lock:
-                        self._files_failed.append(file)
+        if self.stamp_tags(audio):
+            changed = True
 
         if changed:
             with self.lock:
-                self._files_stamped.append(file)
+                self._files_modified.append(file)
             if not self.dry_run:
                 try:
                     audio.save()
@@ -108,3 +94,30 @@ class Stamper:
                     self.logger.error(f"{file}: Failed to save stamped metadata: {e}")
                     with self.lock:
                         self._files_failed.append(file)
+
+    def map_tags(self, audio):
+        changed = False
+        for dest_key, source_key in self.map.items():
+            source_values = audio.get(source_key, [])
+
+            if source_values:
+                if audio.get(dest_key, []) != source_values:
+                    audio[dest_key] = source_values
+                    changed = True
+                if self.clear_source and source_key in audio:
+                    audio[source_key] = []
+                    changed = True
+        return changed
+
+    def stamp_tags(self, audio):
+        changed = False
+        for field, value in self.stamps.items():
+            desired_values = value if isinstance(value, list) else [value]
+            current_values = audio.get(field, [])
+            if sorted(current_values) != sorted(desired_values):
+                try:
+                    audio[field] = desired_values
+                    changed = True
+                except Exception as e:
+                    self.logger.warning(f"Failed to update {field}: {e}")
+        return changed
