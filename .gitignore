@@ -1,6 +1,7 @@
 .*
 !/.gitignore
 !**/.gitkeep
+!.pylintrc
 *test*
 __*__
 *.log

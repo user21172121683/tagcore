@@ -1,40 +1,83 @@
-from utils import *
-from mutagen.flac import FLAC
-import time
 import threading
+import time
+import logging
+from pathlib import Path
+
+from mutagen.flac import FLAC
+
+from utils import (
+    get_config,
+    index_files,
+    parallel_map,
+    summary_message,
+    dry_run_message,
+    UpperFLAC,
+)
 
 
 class Stamper:
-    """
-    Applies static metadata tags to FLAC files.
-    """
+    """Applies static tags and re-maps fields in FLAC files."""
 
     def __init__(self, **config):
         # Setup technical stuff
-        self.logger = get_config(config, "logger", expected_type=logging.Logger, optional=True, default=None)
-        self.max_workers = get_config(config, "max_workers", expected_type=int, optional=True, default=4)
-        self.stop_flag = get_config(config, "stop_flag", expected_type=Event, optional=True, default=None)
+        self.logger = get_config(
+            config, "logger", expected_type=logging.Logger, optional=True, default=None
+        )
+        self.max_workers = get_config(
+            config, "max_workers", expected_type=int, optional=True, default=4
+        )
+        self.stop_flag = get_config(
+            config,
+            "stop_flag",
+            expected_type=threading.Event,
+            optional=True,
+            default=None,
+        )
         self.lock = threading.Lock()
 
         # Load configuration
-        self.dry_run = get_config(config,"dry_run", expected_type=bool, optional=True, default=True)
-        self.main_dir = Path(get_config(config, "main_dir", expected_type=str, optional=False, default=None))
-        self.stamps = {k.upper(): v for k, v in get_config(config, "stamps", expected_type=dict[str, str], optional=True, default={}).items()}
-        self.map = {k.upper(): v.upper() for k, v in get_config(config, "map", expected_type=dict[str, str], optional=True, default={}).items()}
-        self.clear_source = get_config(config, "clear_source", expected_type=bool, optional=True, default=False)
+        self.dry_run = get_config(
+            config, "dry_run", expected_type=bool, optional=True, default=True
+        )
+        self.main_dir = Path(
+            get_config(
+                config, "main_dir", expected_type=str, optional=False, default=None
+            )
+        )
+        self.stamps = {
+            k.upper(): v
+            for k, v in get_config(
+                config,
+                "stamps",
+                expected_type=dict[str, str],
+                optional=True,
+                default={},
+            ).items()
+        }
+        self.map = {
+            k.upper(): v.upper()
+            for k, v in get_config(
+                config, "map", expected_type=dict[str, str], optional=True, default={}
+            ).items()
+        }
+        self.clear_source = get_config(
+            config, "clear_source", expected_type=bool, optional=True, default=False
+        )
 
         # Initialise indices
         self.files = []
         self._files_processed = []
         self._files_modified = []
         self._files_failed = []
-    
+
     def run(self):
         # Start timer
         start = time.time()
 
         # Build index
-        self.files = index_files(directory=self.main_dir, extension="flac", logger=self.logger)
+        self.files = index_files(
+            directory=self.main_dir, extension="flac", logger=self.logger
+        )
 
         # Process FLAC files in parallel
         parallel_map(
@@ -43,15 +86,15 @@ class Stamper:
             max_workers=self.max_workers,
             stop_flag=self.stop_flag,
             logger=self.logger,
-            description="Stamping",
-            unit="files"
+            description=dry_run_message(self.dry_run, "Stamping"),
+            unit="files",
         )
-        
+
         # Final summary
         summary_items = [
             (self._files_processed, "Processed {} files."),
             (self._files_modified, "Modified {} files."),
-            (self._files_failed, "Failed to process {} files.")
+            (self._files_failed, "Failed to process {} files."),
         ]
 
         self.logger.info(
@@ -59,7 +102,7 @@ class Stamper:
                 name="Flagger",
                 summary_items=summary_items,
                 dry_run=self.dry_run,
-                elapsed=time.time() - start
+                elapsed=time.time() - start,
             )
         )
 

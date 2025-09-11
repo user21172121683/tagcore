@@ -1,33 +1,30 @@
 from pathlib import Path
-import threading
 import time
 from collections import defaultdict
 import logging
-from utils import (
-    get_config,
-    index_files,
-    dry_run_message,
-    summary_message
-)
+from tqdm import tqdm
+from utils import get_config, index_files, dry_run_message, summary_message
 
 
 class Lister:
-    """
-    Creates local playlists for folders of FLAC files.
-    """
+    """Creates local playlists for folders of FLAC files."""
 
     def __init__(self, **config):
         # Setup technical stuff
         self.logger = get_config(
-            config, "logger", expected_type=logging.Logger, optional=True, default=None)
+            config, "logger", expected_type=logging.Logger, optional=True, default=None
+        )
 
         # Load configuration
         self.dry_run = get_config(
-            config, "dry_run", expected_type=bool, optional=True, default=True)
-        self.main_dir = Path(get_config(
-            config, "main_dir", expected_type=str, optional=False))
+            config, "dry_run", expected_type=bool, optional=True, default=True
+        )
+        self.main_dir = Path(
+            get_config(config, "main_dir", expected_type=str, optional=False)
+        )
         self.filename = get_config(
-            config, "filename", expected_type=str, optional=True, default="album")
+            config, "filename", expected_type=str, optional=True, default="album"
+        )
 
         # Initialise indices
         self.files = []
@@ -43,7 +40,8 @@ class Lister:
 
         # Build indices
         self.files = index_files(
-            directory=self.main_dir, extension='flac', logger=self.logger)
+            directory=self.main_dir, extension="flac", logger=self.logger
+        )
         for file in self.files:
             folder = file.parent
             filename = file.name
@@ -51,13 +49,20 @@ class Lister:
         self.logger.info(f"Found {len(self.folders)} folders.")
 
         # Build playlist files
-        for folder, tracks in self.folders.items():
+        for folder, tracks in tqdm(
+            self.folders.items(),
+            total=len(self.folders),
+            desc=dry_run_message(self.dry_run, "Building"),
+            unit="playlists",
+            mininterval=0.2,
+            smoothing=0.1,
+        ):
             self.process_folder(folder, tracks)
 
         # Final summary
         summary_items = [
             (self.playlists_processed, "Processed {} playlists."),
-            (self.playlists_written, "Wrote or updated {} playlists.")
+            (self.playlists_written, "Wrote or updated {} playlists."),
         ]
 
         self.logger.info(
@@ -65,7 +70,7 @@ class Lister:
                 name="Flagger",
                 summary_items=summary_items,
                 dry_run=self.dry_run,
-                elapsed=time.time() - start
+                elapsed=time.time() - start,
             )
         )
 

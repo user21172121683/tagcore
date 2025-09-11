@@ -1,0 +1,19 @@
+[MASTER]
+init-hook='import sys; sys.path.append("src")'
+ignore-patterns=^.*_pb2\.py$
+
+[MESSAGES CONTROL]
+disable=
+    C0114,  # missing-module-docstring
+    C0116,  # missing-function-docstring
+    R0903,  # too-few-public-methods
+    R0913,  # too-many-arguments
+    R0902,  # too-many-instance-attributes
+    W0511,  # fixme
+    W0718,  # broad-exception-caught
+
+[FORMAT]
+max-line-length=100
+
+[TYPECHECK]
+generated-members=BeatGrid,BeatMap

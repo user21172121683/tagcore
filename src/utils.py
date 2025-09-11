@@ -1,14 +1,13 @@
-import sys
 import logging
-from datetime import datetime
+import shutil
+import sys
+from concurrent.futures import Executor, ThreadPoolExecutor, as_completed
+from datetime import datetime, timedelta
 from pathlib import Path
 from threading import Event
-import shutil
-from datetime import timedelta
-from tqdm import tqdm
 from typing import *
-from concurrent.futures import ThreadPoolExecutor, Executor, as_completed
 
+from tqdm import tqdm
 
 # Constants
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
@@ -16,11 +15,7 @@ LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
 
 
 # Utility functions
-def index_files(
-    directory: Path,
-    extension: str,
-    logger: logging.Logger
-) -> list[Path]:
+def index_files(directory: Path, extension: str, logger: logging.Logger) -> list[Path]:
     logger.info(f"Indexing {extension.upper()} files in {directory.resolve()}...")
     try:
         files = list(directory.rglob(f"*.{extension.lower()}"))
@@ -38,7 +33,7 @@ def setup_logger(
     name: str,
     level: int = logging.DEBUG,
     console_level: str = "INFO",
-    file_level: str = "DEBUG"
+    file_level: str = "DEBUG",
 ) -> logging.Logger:
     # Helper to convert string level to logging constant
     def get_level(level_str: str) -> int:
@@ -60,12 +55,11 @@ def setup_logger(
             "WARNING": "\033[93m",
             "ERROR": "\033[91m",
             "CRITICAL": "\033[95m",
-            "RESET": "\033[0m"
+            "RESET": "\033[0m",
         }
 
         def format(self, record):
-            color = self.COLORS.get(
-                record.levelname, self.COLORS["RESET"])
+            color = self.COLORS.get(record.levelname, self.COLORS["RESET"])
             message = super().format(record)
             return f"{color}{message}{self.COLORS['RESET']}"
 
@@ -125,7 +119,7 @@ def parallel_map(
     logger: Optional[Any] = None,
     stop_flag: Optional[Any] = None,
     description: Optional[str] = "Processing",
-    unit: str = "items"
+    unit: str = "items",
 ) -> List[Any]:
     """Applies `func` to each item in `items_with_args` in parallel.
 
@@ -171,7 +165,7 @@ def parallel_map(
                 desc=description,
                 unit=unit,
                 mininterval=0.2,
-                smoothing=0.1
+                smoothing=0.1,
             ):
                 if stop_flag and check_stop(stop_flag, logger):
                     # Cancel any remaining futures that haven"t started
@@ -187,7 +181,8 @@ def parallel_map(
                     file = get_item_name(items_with_args[index])
                     err_msg = (
                         f"Error {description} on item {index} ({file}): {e}"
-                        if description else f"Error on item {index} ({file}): {e}"
+                        if description
+                        else f"Error on item {index} ({file}): {e}"
                     )
                     if logger:
                         logger.exception(err_msg)
@@ -205,7 +200,7 @@ def get_config(
     *,
     expected_type: Type,
     default: Any = None,
-    optional: bool = False
+    optional: bool = False,
 ) -> Any:
     value = config.get(key, default)
 
@@ -220,27 +215,37 @@ def get_config(
 
     if origin:
         if not isinstance(value, origin):
-            raise TypeError(f'"{key}" must be of type {origin.__name__}, got {type(value).__name__}.')
+            raise TypeError(
+                f'"{key}" must be of type {origin.__name__}, got {type(value).__name__}.'
+            )
 
         # Special handling for dicts
         if origin is dict and len(args) == 2:
             key_type, val_type = args
             for k, v in value.items():
                 if not isinstance(k, key_type):
-                    raise TypeError(f'Key in "{key}" must be {key_type.__name__}, got {type(k).__name__}')
+                    raise TypeError(
+                        f'Key in "{key}" must be {key_type.__name__}, got {type(k).__name__}'
+                    )
                 if not isinstance(v, val_type):
-                    raise TypeError(f'Value in "{key}" must be {val_type.__name__}, got {type(v).__name__}')
-        
+                    raise TypeError(
+                        f'Value in "{key}" must be {val_type.__name__}, got {type(v).__name__}'
+                    )
+
         # Special handling for lists
         elif origin is list and len(args) == 1:
             item_type = args[0]
             for item in value:
                 if not isinstance(item, item_type):
-                    raise TypeError(f'Item in "{key}" must be {item_type.__name__}, got {type(item).__name__}')
+                    raise TypeError(
+                        f'Item in "{key}" must be {item_type.__name__}, got {type(item).__name__}'
+                    )
     else:
         # Non-generic type (e.g. str, int)
         if not isinstance(value, expected_type):
-            raise TypeError(f'"{key}" must be of type {expected_type.__name__}. Got {type(value).__name__}.')
+            raise TypeError(
+                f'"{key}" must be of type {expected_type.__name__}. Got {type(value).__name__}.'
+            )
 
     return value
 
@@ -271,7 +276,12 @@ class UpperFLAC:
         return getattr(self._flac, attr)
 
 
-def summary_message(name: str, summary_items: list[tuple[list, str]], dry_run: bool, elapsed: float | None = None) -> str:
+def summary_message(
+    name: str,
+    summary_items: list[tuple[list, str]],
+    dry_run: bool,
+    elapsed: float | None = None,
+) -> str:
     # Initialise with banner
     message = banner_message(f"{dry_run_message(dry_run, name)} summary")
 
@@ -282,11 +292,11 @@ def summary_message(name: str, summary_items: list[tuple[list, str]], dry_run: b
         for items, msg_template in summary_items:
             if items:
                 message += "\n" + msg_template.format(len(items))
-    
+
     # Total time elapsed
     if elapsed:
         message += f"\nTotal time elapsed: {str(timedelta(seconds=elapsed))[:-3]}"
-    
+
     # Returning to main
     message += banner_message("Returning...")
     return message

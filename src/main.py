@@ -1,13 +1,15 @@
-import sys
-import yaml
+import argparse
 import ast
 import importlib.util
+import shutil
+import sys
+import threading
+import traceback
 from pathlib import Path
 from pprint import pformat
-import threading
-import shutil
-import argparse
-import traceback
+
+import yaml
+
 from utils import setup_logger
 
 
@@ -41,7 +43,9 @@ class App:
         config_path = self.base_dir.parent / "config.yaml"
         if config_path.is_file():
             return config_path
-        raise FileNotFoundError("config.yaml not found in the parent directory of main.py.")
+        raise FileNotFoundError(
+            "config.yaml not found in the parent directory of main.py."
+        )
 
     def load_config(self) -> dict:
         """
@@ -63,12 +67,12 @@ class App:
         """
         overrides = {}
         for item in override_list:
-            if '=' not in item:
+            if "=" not in item:
                 print(f"Invalid override format (missing '='): {item}")
                 continue
 
-            key_path, value_str = item.split('=', 1)
-            keys = key_path.split('.')
+            key_path, value_str = item.split("=", 1)
+            keys = key_path.split(".")
 
             try:
                 value = ast.literal_eval(value_str)
@@ -112,7 +116,11 @@ class App:
                             "class": obj,
                             "module": module_name,
                             "class_name": obj.__name__,
-                            "doc": (obj.__doc__ or "").strip().splitlines()[0] if obj.__doc__ else ""
+                            "doc": (
+                                (obj.__doc__ or "").strip().splitlines()[0]
+                                if obj.__doc__
+                                else ""
+                            ),
                         }
                         break
 
@@ -128,25 +136,33 @@ class App:
         try:
             cls = self.scripts[name]["class"]
 
-            script_args = self.config.get('General', {}).copy()
+            script_args = self.config.get("General", {}).copy()
             script_args.update(self.config.get(name, {}))
 
             if confirm:
-                answer = input(f"{pformat(script_args, indent=2, width=80, sort_dicts=True)}\nRun {name} with the above config? (Y/n): ").strip().lower()
+                answer = (
+                    input(
+                        f"{pformat(script_args, indent=2, width=80, sort_dicts=True)}\nRun {name} with the above config? (Y/n): "
+                    )
+                    .strip()
+                    .lower()
+                )
                 if answer not in ("", "y", "yes"):
                     print("Aborting script run.")
                     return
             else:
-                print(f"\nRunning {name} with config:\n{pformat(script_args, indent=2, width=80, sort_dicts=True)}")
+                print(
+                    f"\nRunning {name} with config:\n{pformat(script_args, indent=2, width=80, sort_dicts=True)}"
+                )
 
             stop_flag = threading.Event()
-            script_args['stop_flag'] = stop_flag
+            script_args["stop_flag"] = stop_flag
             logger = setup_logger(
                 name=self.scripts[name]["module"],
                 console_level=script_args.get("console_level", "INFO"),
-                file_level=script_args.get("file_level", "DEBUG")
+                file_level=script_args.get("file_level", "DEBUG"),
             )
-            script_args['logger'] = logger
+            script_args["logger"] = logger
             instance = cls(**script_args)
 
             # Function to run the script
@@ -157,7 +173,9 @@ class App:
                 except Exception as e:
                     print(f"Error running script '{name}': {e}")
                     traceback.print_exc()
-                    print(f"An error occurred while running '{name}'. Check the logs for details.")
+                    print(
+                        f"An error occurred while running '{name}'. Check the logs for details."
+                    )
 
             # Function to listen for 'q'
             def input_listener():
@@ -186,7 +204,9 @@ class App:
         except Exception as e:
             print(f"Error launching script '{name}': {e}")
             traceback.print_exc()
-            print(f"An error occurred while launching '{name}'. Check the logs for details.")
+            print(
+                f"An error occurred while launching '{name}'. Check the logs for details."
+            )
 
     def refresh(self):
         """
@@ -205,7 +225,7 @@ class App:
         """
         # Use the directory where the script is located
         base_path = Path(__file__).resolve().parent
-        
+
         # Clear all __pycache__ directories using pathlib
         for pycache_dir in base_path.rglob("__pycache__"):
             try:
@@ -216,7 +236,7 @@ class App:
 
         # Clear sys.modules cache
         for module_name in list(sys.modules.keys()):
-            if module_name not in ('__main__', 'builtins'):
+            if module_name not in ("__main__", "builtins"):
                 del sys.modules[module_name]
 
         print("Cleared Python caches.")
@@ -225,15 +245,15 @@ class App:
 def main():
     parser = argparse.ArgumentParser(description="Script Runner")
     parser.add_argument(
-        'scripts_to_run', 
-        nargs='*', 
-        help='Names of scripts to run automatically (by class name)'
+        "scripts_to_run",
+        nargs="*",
+        help="Names of scripts to run automatically (by class name)",
     )
     parser.add_argument(
-        '--override',
-        nargs='*',
+        "--override",
+        nargs="*",
         default=[],
-        help='Override config values: format section.key=value (e.g., General.dry_run=true)'
+        help="Override config values: format section.key=value (e.g., General.dry_run=true)",
     )
 
     args = parser.parse_args()
@@ -274,12 +294,14 @@ def main():
                 indexed_names = sorted(app.scripts.items())
                 for i, (name, info) in enumerate(indexed_names, start=1):
                     description = info.get("doc", "")
-                    display_name = info['class_name']
+                    display_name = info["class_name"]
                     if description:
                         display_name += f": {description}"
                     print(f"  [{i}] {display_name}")
 
-                script_input = input("\nEnter script number or class name (or press Enter to quit): ").strip()
+                script_input = input(
+                    "\nEnter script number or class name (or press Enter to quit): "
+                ).strip()
 
                 if not script_input:
                     break

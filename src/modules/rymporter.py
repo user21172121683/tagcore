@@ -1,30 +1,58 @@
-from mutagen.flac import FLAC
-import traceback
-from utils import *
-from pathlib import Path
-from modules._rymparser import Rymparser
-import time
 import threading
+import time
+import traceback
+from pathlib import Path
+import logging
+
+from mutagen.flac import FLAC
+
+from modules._rymparser import Rymparser
+from utils import (
+    get_config,
+    index_files,
+    parallel_map,
+    DATA_DIR,
+    summary_message,
+    dry_run_message,
+)
 
 
 class Rymporter:
-    """
-    Parses RYM collection HTML and updates FLAC files with matched metadata.
-    """
+    """Updates FLAC files with metadata from RYM collection."""
 
     def __init__(self, **config):
         # Setup technical stuff
-        self.logger = get_config(config, "logger", expected_type=logging.Logger, optional=True, default=None)
-        self.max_workers = get_config(config, "max_workers", expected_type=int, optional=True, default=4)
-        self.stop_flag = get_config(config, "stop_flag", expected_type=Event, optional=True, default=None)
+        self.logger = get_config(
+            config, "logger", expected_type=logging.Logger, optional=True, default=None
+        )
+        self.max_workers = get_config(
+            config, "max_workers", expected_type=int, optional=True, default=4
+        )
+        self.stop_flag = get_config(
+            config,
+            "stop_flag",
+            expected_type=threading.Event,
+            optional=True,
+            default=None,
+        )
         self.lock = threading.Lock()
 
         # Load configuration
-        self.dry_run = get_config(config, "dry_run", expected_type=bool, optional=True, default=True)
-        self.main_dir = Path(get_config(config, "main_dir", expected_type=str, optional=False))
-        self.field_definitions = get_config(config, "field_definitions", expected_type=dict[str, str], optional=False)
-        self.fields_to_modify = get_config(config, "fields_to_modify", expected_type=dict[str, bool], optional=False)
-        self.collection = DATA_DIR / get_config(config, "collection", expected_type=str, optional=False)
+        self.dry_run = get_config(
+            config, "dry_run", expected_type=bool, optional=True, default=True
+        )
+        self.main_dir = Path(
+            get_config(config, "main_dir", expected_type=str, optional=False)
+        )
+        self.field_definitions = get_config(
+            config, "field_definitions", expected_type=dict[str, str], optional=False
+        )
+        self.fields_to_modify = get_config(
+            config, "fields_to_modify", expected_type=dict[str, bool], optional=False
+        )
+        self.collection = DATA_DIR / get_config(
+            config, "collection", expected_type=str, optional=False
+        )
 
         # Initialise indices
         self.files = []
@@ -39,39 +67,45 @@ class Rymporter:
     def run(self):
         """
         Parse the RYM collection HTML and update FLAC files with matched metadata.
-        Raises RuntimeError on fatal errors.
         """
         # Start timer
         start = time.time()
 
         # Build indices
         self.rym_albums = self.parse_collection_html()
-        self.files = index_files(directory=self.main_dir, extension="flac", logger=self.logger)
-
-        # Try to find a match for each FLAC file
-        self.logger.info("Matching files with RYM albums...")
-        parallel_map(
-            func=self.match_album,
-            items_with_args=self.files,
-            max_workers=self.max_workers,
-            stop_flag=self.stop_flag,
-            logger=self.logger,
-            description="Matching",
-            unit="files"
+        self.files = index_files(
+            directory=self.main_dir, extension="flac", logger=self.logger
         )
+
+        if self.rym_albums and self.files:
+            # Try to find a match for each FLAC file
+            self.logger.info("Matching files with RYM albums...")
+            parallel_map(
+                func=self.match_album,
+                items_with_args=self.files,
+                max_workers=self.max_workers,
+                stop_flag=self.stop_flag,
+                logger=self.logger,
+                description=dry_run_message(self.dry_run, "Matching"),
+                unit="files",
+            )
+
         # Final summary
         summary_items = [
             (self._files_processed, "Processed {} FLAC files."),
             (self._files_modified, "Modified {} FLAC files."),
             (self._albums_to_skip, "Skipped {} unmatched albums."),
-            (self._files_insufficient_metadata, "Skipped {} FLAC files with insufficient metadata.")
+            (
+                self._files_insufficient_metadata,
+                "Skipped {} FLAC files with insufficient metadata.",
+            ),
         ]
         self.logger.info(
             summary_message(
                 name="Rymporter",
                 summary_items=summary_items,
                 dry_run=self.dry_run,
-                elapsed=time.time() - start
+                elapsed=time.time() - start,
             )
         )
 
@@ -104,7 +138,9 @@ class Rymporter:
         try:
             audio = FLAC(file)
             audio_artist = audio.get(self.field_definitions["artist_name"], [""])[0]
-            audio_album_title = audio.get(self.field_definitions["album_title"], [""])[0]
+            audio_album_title = audio.get(self.field_definitions["album_title"], [""])[
+                0
+            ]
             audio_album_id = audio.get(self.field_definitions["album_id"], [""])[0]
 
             # Check if file has sufficient metadata for matching

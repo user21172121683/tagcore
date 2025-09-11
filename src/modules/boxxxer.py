@@ -1,27 +1,140 @@
 import sqlite3
-import xml.etree.ElementTree as ET
 import time
-from utils import *
-import modules._beats_pb2 as _beats_pb2
+import xml.etree.ElementTree as ET
 from statistics import mean
+import logging
+import threading
+from pathlib import Path
+from google.protobuf.message import DecodeError
+
+from modules import _beats_pb2
+from utils import get_config, DATA_DIR, check_stop, summary_message, dry_run_message
 
 
 class Boxxxer:
-    """
-    Exports an XML of your Mixxx library to be imported into Rekordbox.
-    """
+    """Exports an XML of your Mixxx library to be imported into Rekordbox."""
+
+    _MIXXX_DB_INCLUDE = [
+        "PlaylistTracks",
+        "Playlists",
+        "crate_tracks",
+        "crates",
+        "cues",
+        "library",
+        "track_locations",
+    ]
+
+    _TRACK_MAP = {
+        "TrackID": "id",
+        "Name": "title",
+        "Artist": "artist",
+        "Composer": "composer",
+        "Album": "album",
+        "Grouping": "grouping",
+        "Genre": "genre",
+        "Kind": "filetype",
+        "Size": "filesize",
+        "TotalTime": "duration",
+        "DiscNumber": "discnumber",  # Not stored by Mixxx, set to 0
+        "TrackNumber": "tracknumber",
+        "Year": "year",
+        "AverageBpm": "bpm",
+        "DateAdded": "datetime_added",
+        "BitRate": "bitrate",
+        "SampleRate": "samplerate",
+        "Comments": "comment",
+        "PlayCount": "timesplayed",
+        "Rating": "rating",
+        "Location": "location",
+        "Remixer": "remixer",  # Not stored by Mixxx, set to ""
+        "Tonality": "key",
+        "Label": "label",  # Not stored by Mixxx, set to ""
+        "Mix": "mix",  # Not stored by Mixxx, set to ""
+    }
+
+    _KEY_MAP = {
+        "Abm": "1A",
+        "G#m": "1A",
+        "Ebm": "2A",
+        "D#m": "2A",
+        "Bbm": "3A",
+        "A#m": "3A",
+        "Fm": "4A",
+        "Cm": "5A",
+        "Gm": "6A",
+        "Dm": "7A",
+        "Am": "8A",
+        "Em": "9A",
+        "Bm": "10A",
+        "Cbm": "10A",
+        "F#m": "11A",
+        "Gbm": "11A",
+        "Dbm": "12A",
+        "C#m": "12A",
+        "B": "1B",
+        "Cb": "1B",
+        "F#": "2B",
+        "Gb": "2B",
+        "Db": "3B",
+        "C#": "3B",
+        "Ab": "4B",
+        "G#": "4B",
+        "Eb": "5B",
+        "D#": "5B",
+        "Bb": "6B",
+        "A#": "6B",
+        "F": "7B",
+        "C": "8B",
+        "G": "9B",
+        "D": "10B",
+        "A": "11B",
+        "E": "12B",
+    }
+
+    _RATING_MAP = {0: 0, 1: 51, 2: 102, 3: 153, 4: 204, 5: 255}
+
+    _COLOR_MAP = {
+        "Red": ((120, 0, 0), (255, 100, 100), "0xFF0000"),
+        "Orange": ((200, 100, 0), (255, 170, 80), "0xFFA500"),
+        "Yellow": ((200, 200, 0), (255, 255, 150), "0xFFFF00"),
+        "Green": ((0, 100, 0), (150, 255, 180), "0x00FF00"),
+        "Aqua": ((0, 200, 200), (150, 255, 255), "0x25FDE9"),
+        "Blue": ((0, 0, 100), (150, 150, 255), "0x0000FF"),
+        "Purple": ((120, 0, 120), (200, 100, 255), "0x660099"),
+        "Pink": ((200, 0, 100), (255, 200, 255), "0xFF007F"),
+        "Gray": ((100, 100, 100), (180, 180, 180), "0x808080"),
+        "White": ((220, 220, 220), (255, 255, 255), "0xFFFFFF"),
+    }
 
     def __init__(self, **config):
         # Setup technical stuff
-        self.logger = get_config(config, "logger", expected_type=logging.Logger, optional=True, default=None)
-        self.stop_flag = get_config(config, "stop_flag", expected_type=Event, optional=True, default=None)
+        self.logger = get_config(
+            config, "logger", expected_type=logging.Logger, optional=True, default=None
+        )
+        self.stop_flag = get_config(
+            config,
+            "stop_flag",
+            expected_type=threading.Event,
+            optional=True,
+            default=None,
+        )
 
         # Load configuration
-        self.dry_run = get_config(config, "dry_run", expected_type=bool, optional=True, default=True)
-        self.mixxx_db = DATA_DIR / get_config(config, "mixxx_db", expected_type=str, optional=False)
-        self.output = DATA_DIR / get_config(config, "output", expected_type=str, optional=True, default="rekordbox.xml")
-        self.hot_to_memory = get_config(config, "hot_to_memory", expected_type=bool, optional=True, default=False)
-        playlist_dir_str = get_config(config, "playlist_dir", expected_type=str, optional=True, default=None)
+        self.dry_run = get_config(
+            config, "dry_run", expected_type=bool, optional=True, default=True
+        )
+        self.mixxx_db = DATA_DIR / get_config(
+            config, "mixxx_db", expected_type=str, optional=False
+        )
+        self.output = DATA_DIR / get_config(
+            config, "output", expected_type=str, optional=True, default="rekordbox.xml"
+        )
+        self.hot_to_memory = get_config(
+            config, "hot_to_memory", expected_type=bool, optional=True, default=False
+        )
+        playlist_dir_str = get_config(
+            config, "playlist_dir", expected_type=str, optional=True, default=None
+        )
         self.playlist_dir = Path(playlist_dir_str) if playlist_dir_str else None
 
         # Initialise indices
@@ -33,109 +146,9 @@ class Boxxxer:
         # Stats
         self._tracks_processed = []
 
-        # Mappings
-        self.MIXXX_DB_INCLUDE = [
-            "PlaylistTracks",
-            "Playlists",
-            "crate_tracks",
-            "crates",
-            "cues",
-            "library",
-            "track_locations"
-        ]
-
-        self.TRACK_MAP = {
-            "TrackID": "id",
-            "Name": "title",
-            "Artist": "artist",
-            "Composer": "composer",
-            "Album": "album",
-            "Grouping": "grouping",
-            "Genre": "genre",
-            "Kind": "filetype",
-            "Size": "filesize",
-            "TotalTime": "duration",
-            "DiscNumber": "discnumber",     # Not stored by Mixxx, set to 0
-            "TrackNumber": "tracknumber",
-            "Year": "year",
-            "AverageBpm": "bpm",
-            "DateAdded": "datetime_added",
-            "BitRate": "bitrate",
-            "SampleRate": "samplerate",
-            "Comments": "comment",
-            "PlayCount": "timesplayed",
-            "Rating": "rating",
-            "Location": "location",
-            "Remixer": "remixer",           # Not stored by Mixxx, set to ""
-            "Tonality": "key",
-            "Label": "label",               # Not stored by Mixxx, set to ""
-            "Mix": "mix",                   # Not stored by Mixxx, set to ""
-        }
-
-        self.KEY_MAP = {
-            "Abm": "1A",
-            "G#m": "1A",
-            "Ebm": "2A",
-            "D#m": "2A",
-            "Bbm": "3A",
-            "A#m": "3A",
-            "Fm": "4A",
-            "Cm": "5A",
-            "Gm": "6A",
-            "Dm": "7A",
-            "Am": "8A",
-            "Em": "9A",
-            "Bm": "10A",
-            "Cbm": "10A",
-            "F#m": "11A",
-            "Gbm": "11A",
-            "Dbm": "12A",
-            "C#m": "12A",
-            "B": "1B",
-            "Cb": "1B",
-            "F#": "2B",
-            "Gb": "2B",
-            "Db": "3B",
-            "C#": "3B",
-            "Ab": "4B",
-            "G#": "4B",
-            "Eb": "5B",
-            "D#": "5B",
-            "Bb": "6B",
-            "A#": "6B",
-            "F": "7B",
-            "C": "8B",
-            "G": "9B",
-            "D": "10B",
-            "A": "11B",
-            "E": "12B",
-        }
-
-        self.RATING_MAP = {
-            0: 0,
-            1: 51,
-            2: 102,
-            3: 153,
-            4: 204,
-            5: 255
-        }
-
-        self.COLOR_MAP = {
-            "Red":    ((120,   0,   0), (255, 100, 100), "0xFF0000"),
-            "Orange": ((200, 100,   0), (255, 170,  80), "0xFFA500"),
-            "Yellow": ((200, 200,   0), (255, 255, 150), "0xFFFF00"),
-            "Green":  ((  0, 100,   0), (150, 255, 180), "0x00FF00"),
-            "Aqua":   ((  0, 200, 200), (150, 255, 255), "0x25FDE9"),
-            "Blue":   ((  0,   0, 100), (150, 150, 255), "0x0000FF"),
-            "Purple": ((120,   0, 120), (200, 100, 255), "0x660099"),
-            "Pink":   ((200,   0, 100), (255, 200, 255), "0xFF007F"),
-            "Gray":   ((100, 100, 100), (180, 180, 180), "0x808080"),
-            "White":  ((220, 220, 220), (255, 255, 255), "0xFFFFFF")
-        }
-
     def run(self):
         # Start timer
-        self.start_time = time.time()
+        start = time.time()
 
         # Build indices
         self.mixxx_data = self._sqlite_to_dict()
@@ -168,7 +181,7 @@ class Boxxxer:
             summary_items = [
                 (self._tracks_processed, "Processed {} tracks."),
                 (self.playlists, "Converted {} playlists."),
-                (self.crates, "Converted {} crates.")
+                (self.crates, "Converted {} crates."),
             ]
 
             self.logger.info(
@@ -176,10 +189,10 @@ class Boxxxer:
                     name="Boxxxer",
                     summary_items=summary_items,
                     dry_run=self.dry_run,
-                    elapsed=time.time() - self.start_time
+                    elapsed=time.time() - start,
                 )
             )
-        
+
         else:
             self.logger.info("Process interrupted by stop flag. No output generated.")
 
@@ -189,16 +202,24 @@ class Boxxxer:
         dj_playlists = ET.Element("DJ_PLAYLISTS", Version="1.0.0")
 
         # PRODUCT
-        ET.SubElement(dj_playlists, "PRODUCT", Name="fuckrekordbox", Version="666", Company="PioneerOfVendorLock")
+        ET.SubElement(
+            dj_playlists,
+            "PRODUCT",
+            Name="fuckrekordbox",
+            Version="666",
+            Company="PioneerOfVendorLock",
+        )
 
         # COLLECTION
-        collection = ET.SubElement(dj_playlists, "COLLECTION", Entries=str(len(self.tracks)))
+        collection = ET.SubElement(
+            dj_playlists, "COLLECTION", Entries=str(len(self.tracks))
+        )
 
         # TRACKS
         self.logger.info("Populating tracks...")
         for track in self.tracks:
             track_attribs = {}
-            for xml_attr, mixxx_key in self.TRACK_MAP.items():
+            for xml_attr, mixxx_key in self._TRACK_MAP.items():
                 if mixxx_key is not None:
                     value = track.get(mixxx_key, "")
                     track_attribs[xml_attr] = str(value)
@@ -215,10 +236,12 @@ class Boxxxer:
                 window_size = 8
                 if len(beats) > 1:
                     # Calculate intervals between beats
-                    intervals = [beats[i+1] - beats[i] for i in range(len(beats) - 1)]
+                    intervals = [beats[i + 1] - beats[i] for i in range(len(beats) - 1)]
 
                     # Calculate instantaneous BPMs
-                    instant_bpms = [60 / interval if interval > 0 else 0 for interval in intervals]
+                    instant_bpms = [
+                        60 / interval if interval > 0 else 0 for interval in intervals
+                    ]
 
                     # Pad last value so we have the same length as beats
                     instant_bpms.append(instant_bpms[-1])
@@ -226,7 +249,7 @@ class Boxxxer:
                     # Compute sliding window BPMs
                     bpm_values = []
                     for i in range(len(instant_bpms)):
-                        window = instant_bpms[max(0, i - window_size + 1): i + 1]
+                        window = instant_bpms[max(0, i - window_size + 1) : i + 1]
                         bpm_values.append(round(mean(window), 2))
                 else:
                     # Fallback if there's only one beat
@@ -243,7 +266,7 @@ class Boxxxer:
                             Inizio=str(beat),
                             Bpm=str(current_bpm),
                             Metro="4/4",
-                            Battito=str((i % 4) + 1)
+                            Battito=str((i % 4) + 1),
                         )
                         last_bpm = current_bpm
 
@@ -256,74 +279,90 @@ class Boxxxer:
                         "POSITION_MARK",
                         Name="",
                         Type="0",
-                        Start=str(self.adjust_cue_time(cue["position"], track["channels"], track["samplerate"])),
-                        Num=str(cue["hotcue"] if not self.hot_to_memory else -1)
+                        Start=str(
+                            self.adjust_cue_time(
+                                cue["position"], track["channels"], track["samplerate"]
+                            )
+                        ),
+                        Num=str(cue["hotcue"] if not self.hot_to_memory else -1),
                     )
 
                     # The cue point
                     if cue["type"] == 2:
-                        position_mark.set(
-                            "Num",
-                            "-1"
-                        )
+                        position_mark.set("Num", "-1")
 
                     # Hot cues and loops
                     if cue["type"] in (1, 4):
                         # Hot cue name
-                        position_mark.set(
-                            "Name",
-                            cue.get("label", "")
-                        )
+                        position_mark.set("Name", cue.get("label", ""))
 
                         # Hot cue colour
                         if cue.get("color") and not self.hot_to_memory:
                             rgb = self.decimal_to_rgb(cue.get("color"))
-                            position_mark.set(
-                                "Red",
-                                str(rgb[0])
-                            )
-                            position_mark.set(
-                                "Green",
-                                str(rgb[1])
-                            )
-                            position_mark.set(
-                                "Blue",
-                                str(rgb[2])
-                            )
-                    
+                            position_mark.set("Red", str(rgb[0]))
+                            position_mark.set("Green", str(rgb[1]))
+                            position_mark.set("Blue", str(rgb[2]))
+
                     # Loop end point and type
                     if cue["type"] == 4:
                         position_mark.set(
                             "End",
-                            str(self.adjust_cue_time(cue["position"] + cue["length"], track["channels"], track["samplerate"]))
+                            str(
+                                self.adjust_cue_time(
+                                    cue["position"] + cue["length"],
+                                    track["channels"],
+                                    track["samplerate"],
+                                )
+                            ),
                         )
-                        position_mark.set(
-                            "Type",
-                            "4"
-                        )
+                        position_mark.set("Type", "4")
 
         # PLAYLISTS
         self.logger.info("Populating playlists and crates...")
         lists = ET.SubElement(dj_playlists, "PLAYLISTS")
         lists_root = ET.SubElement(lists, "NODE", Type="0", Name="ROOT", Count="2")
-        playlists = ET.SubElement(lists_root, "NODE", Type="0", Name="Playlists", Count=str(len(self.playlists)))
-        for playlist in self.playlists:
-            node = ET.SubElement(playlists, "NODE", Type="1", Name=str(playlist), KeyType="0", Entries=str(len(self.playlists[playlist])))
-            for track in self.playlists[playlist]:
+        playlists = ET.SubElement(
+            lists_root,
+            "NODE",
+            Type="0",
+            Name="Playlists",
+            Count=str(len(self.playlists)),
+        )
+        for playlist, tracks in self.playlists.items():
+            node = ET.SubElement(
+                playlists,
+                "NODE",
+                Type="1",
+                Name=str(playlist),
+                KeyType="0",
+                Entries=str(len(tracks)),
+            )
+            for track in tracks:
                 ET.SubElement(node, "TRACK", Key=str(track))
 
         # CRATES
-        crates = ET.SubElement(lists_root, "NODE", Type="0", Name="Crates", Count=str(len(self.crates)))
-        for crate in self.crates:
-            node = ET.SubElement(crates, "NODE", Type="1", Name=str(crate), KeyType="0", Entries=str(len(self.crates[crate])))
-            for track in self.crates[crate]:
+        crates = ET.SubElement(
+            lists_root, "NODE", Type="0", Name="Crates", Count=str(len(self.crates))
+        )
+        for crate, tracks in self.crates.items():
+            node = ET.SubElement(
+                crates,
+                "NODE",
+                Type="1",
+                Name=str(crate),
+                KeyType="0",
+                Entries=str(len(tracks)),
+            )
+            for track in tracks:
                 ET.SubElement(node, "TRACK", Key=str(track))
 
         # Build tree and save to file
         tree = ET.ElementTree(dj_playlists)
         if not self.dry_run:
             tree.write(self.output, encoding="utf-8", xml_declaration=True)
-        self.logger.info(dry_run_message(self.dry_run, f"Saved output to {self.output}!"))
+        self.logger.info(
+            dry_run_message(self.dry_run, f"Saved output to {self.output}!")
+        )
 
     def _sqlite_to_dict(self):
         try:
@@ -331,10 +370,14 @@ class Boxxxer:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
 
-            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+            cursor.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+            )
             all_tables = [row["name"] for row in cursor.fetchall()]
 
-            target_tables = self.MIXXX_DB_INCLUDE if self.MIXXX_DB_INCLUDE else all_tables
+            target_tables = (
+                self._MIXXX_DB_INCLUDE if self._MIXXX_DB_INCLUDE else all_tables
+            )
             target_tables = [t for t in target_tables if t in all_tables]
 
             db_dict = {}
@@ -365,7 +408,11 @@ class Boxxxer:
             if cue["track_id"] == track_id and cue["type"] in (1, 2, 4):
                 if not track.get("cues", None):
                     track["cues"] = []
-                cue_attribs = {k: v for k, v in cue.items() if k in ["color", "hotcue", "label", "length", "position", "type"]}
+                cue_attribs = {
+                    k: v
+                    for k, v in cue.items()
+                    if k in ["color", "hotcue", "label", "length", "position", "type"]
+                }
                 track["cues"].append(cue_attribs)
 
     def build_playlists(self):
@@ -430,7 +477,7 @@ class Boxxxer:
 
         # Standardise key
         if track["key"] != "":
-            track["key"] = self.KEY_MAP[track["key"]]
+            track["key"] = self._KEY_MAP[track["key"]]
 
         # Round BPM to 2 decimal places
         if track["bpm"]:
@@ -438,7 +485,7 @@ class Boxxxer:
 
         # Map rating
         if track["rating"]:
-            track["rating"] = self.RATING_MAP[track["rating"]]
+            track["rating"] = self._RATING_MAP[track["rating"]]
         else:
             track["rating"] = 0
 
@@ -448,11 +495,13 @@ class Boxxxer:
 
         # Map colour
         if track.get("color"):
-            track["grouping"] = self.classify_rgb(*self.decimal_to_rgb(track["color"]))[0]
+            track["grouping"] = self.classify_rgb(*self.decimal_to_rgb(track["color"]))[
+                0
+            ]
             track["color"] = self.classify_rgb(*self.decimal_to_rgb(track["color"]))[1]
         else:
             track["grouping"] = ""
-        
+
         # Fields that Mixxx doesn"t store
         track["discnumber"] = 0
         track["composer"] = ""
@@ -461,7 +510,7 @@ class Boxxxer:
         track["mix"] = ""
 
     def adjust_cue_time(self, samples, channels, samplerate):
-        return "{:.3f}".format(samples / channels / samplerate)
+        return f"{samples / channels / samplerate:.3f}"
 
     def adjust_beat_time(self, frame_position, samplerate, bpm):
         position_seconds = frame_position / samplerate
@@ -471,7 +520,7 @@ class Boxxxer:
                 position_seconds += beat_length
             elif position_seconds > beat_length:
                 position_seconds -= beat_length
-        return "{:.3f}".format(position_seconds)
+        return f"{position_seconds:.3f}"
 
     def decimal_to_rgb(self, decimal):
         r = (decimal >> 16) & 0xFF
@@ -480,11 +529,11 @@ class Boxxxer:
         return r, g, b
 
     def classify_rgb(self, r, g, b):
-        for color_str, (min_rgb, max_rgb, color_hex) in self.COLOR_MAP.items():
+        for color_str, (min_rgb, max_rgb, color_hex) in self._COLOR_MAP.items():
             if (
-                min_rgb[0] <= r <= max_rgb[0] and
-                min_rgb[1] <= g <= max_rgb[1] and
-                min_rgb[2] <= b <= max_rgb[2]
+                min_rgb[0] <= r <= max_rgb[0]
+                and min_rgb[1] <= g <= max_rgb[1]
+                and min_rgb[2] <= b <= max_rgb[2]
             ):
                 return color_str, color_hex
         return "Unknown"
@@ -507,11 +556,15 @@ class Boxxxer:
 
                 for beat in beats_proto.beat:
                     frame_position = beat.frame_position
-                    time_seconds = float(self.adjust_beat_time(frame_position, samplerate, bpm))
+                    time_seconds = float(
+                        self.adjust_beat_time(frame_position, samplerate, bpm)
+                    )
                     beat_times.append(time_seconds)
 
-            except Exception as e:
-                self.logger.warning(f"Failed to parse BeatMap: {e}")
+            except DecodeError as e:
+                self.logger.warning(f"Failed to decode BeatMap protobuf: {e}")
+            except (TypeError, ValueError, AttributeError) as e:
+                self.logger.warning(f"Invalid data in BeatMap: {e}")
 
         elif beats_version.startswith("BeatGrid"):
             try:
@@ -520,11 +573,15 @@ class Boxxxer:
 
                 if beats_proto.HasField("first_beat"):
                     frame_position = beats_proto.first_beat.frame_position
-                    time_seconds = float(self.adjust_beat_time(frame_position, samplerate, bpm))
+                    time_seconds = float(
+                        self.adjust_beat_time(frame_position, samplerate, bpm)
+                    )
                     beat_times.append(time_seconds)
 
-            except Exception as e:
-                self.logger.warning(f"Failed to parse BeatGrid: {e}")
+            except DecodeError as e:
+                self.logger.warning(f"Failed to decode BeatGrid protobuf: {e}")
+            except (TypeError, ValueError, AttributeError) as e:
+                self.logger.warning(f"Invalid data in BeatGrid: {e}")
 
         if beat_times:
             track["beats"] = beat_times

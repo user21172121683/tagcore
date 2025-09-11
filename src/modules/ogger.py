@@ -1,36 +1,103 @@
+import hashlib
 import subprocess
-from utils import *
+import threading
+import time
 from pathlib import Path
+import logging
+
 from mutagen.flac import FLAC
 from mutagen.oggvorbis import OggVorbis
-import hashlib
-import time
-import threading
+
+from utils import (
+    get_config,
+    index_files,
+    parallel_map,
+    check_stop,
+    summary_message,
+    dry_run_message,
+)
 
 
 class Ogger:
-    """
-    Keeps a collection of OGG files synced against a main collection of FLAC files.
-    """
+    """Keeps a collection of OGG files synced against a main collection of FLAC files."""
+
+    _BITRATE_QUALITY_MAP = {
+        0: 64000,
+        1: 80000,
+        2: 96000,
+        3: 112000,
+        4: 128000,
+        5: 160000,
+        6: 192000,
+        7: 224000,
+        8: 256000,
+        9: 320000,
+        10: 499000,
+    }
 
     def __init__(self, **config):
         # Setup technical stuff
-        self.logger = get_config(config, "logger", expected_type=logging.Logger, optional=True, default=None)
-        self.max_workers = get_config(config, "max_workers", expected_type=int, optional=True, default=4)
-        self.stop_flag = get_config(config, "stop_flag", expected_type=Event, optional=True, default=None)
+        self.logger = get_config(
+            config, "logger", expected_type=logging.Logger, optional=True, default=None
+        )
+        self.max_workers = get_config(
+            config, "max_workers", expected_type=int, optional=True, default=4
+        )
+        self.stop_flag = get_config(
+            config,
+            "stop_flag",
+            expected_type=threading.Event,
+            optional=True,
+            default=None,
+        )
         self.lock = threading.Lock()
 
         # Load configuration
-        self.dry_run = get_config(config, "dry_run", expected_type=bool, optional=True, default=True)
-        self.flac_dir = Path(get_config(config, "main_dir", expected_type=str, optional=False))
-        self.ogg_dir = Path(get_config(config, "ogg_dir", expected_type=str, optional=False))
-        self.quality = get_config(config, "quality", expected_type=int, optional=True, default=2)
-        self.sample_rate = get_config(config, "sample_rate", expected_type=int, optional=True, default=44100)
-        self.channels = get_config(config, "channels", expected_type=int, optional=True, default=2)
-        self.track_id_field = (get_config(config, "track_id_field", expected_type=str, optional=True, default=None)).upper() or None
-        self.filename_match = get_config(config, "filename_match", expected_type=bool, optional=True, default=True)
-        self.cover_target_size = tuple(get_config(config, "cover_target_size", expected_type=list[int, int], optional=True, default=[600, 600]))
-        self.fields_to_preserve = {field.upper() for field in get_config(config, "fields_to_preserve", expected_type=list[str], optional=True, default=[])}
+        self.dry_run = get_config(
+            config, "dry_run", expected_type=bool, optional=True, default=True
+        )
+        self.flac_dir = Path(
+            get_config(config, "main_dir", expected_type=str, optional=False)
+        )
+        self.ogg_dir = Path(
+            get_config(config, "ogg_dir", expected_type=str, optional=False)
+        )
+        self.quality = get_config(
+            config, "quality", expected_type=int, optional=True, default=2
+        )
+        self.sample_rate = get_config(
+            config, "sample_rate", expected_type=int, optional=True, default=44100
+        )
+        self.channels = get_config(
+            config, "channels", expected_type=int, optional=True, default=2
+        )
+        self.track_id_field = (
+            get_config(
+                config, "track_id_field", expected_type=str, optional=True, default=None
+            )
+        ).upper() or None
+        self.filename_match = get_config(
+            config, "filename_match", expected_type=bool, optional=True, default=True
+        )
+        self.cover_target_size = tuple(
+            get_config(
+                config,
+                "cover_target_size",
+                expected_type=list[int, int],
+                optional=True,
+                default=[600, 600],
+            )
+        )
+        self.fields_to_preserve = {
+            field.upper()
+            for field in get_config(
+                config,
+                "fields_to_preserve",
+                expected_type=list[str],
+                optional=True,
+                default=[],
+            )
+        }
 
         # Initialise indices
         self.flac_files = []
@@ -48,28 +115,15 @@ class Ogger:
         self._ogg_files_modified = []
         self._directories_deleted = []
 
-        # Map quality levels to bitrates
-        self.BITRATE_QUALITY_MAP = {
-            0: 64000,
-            1: 80000,
-            2: 96000,
-            3: 112000,
-            4: 128000,
-            5: 160000,
-            6: 192000,
-            7: 224000,
-            8: 256000,
-            9: 320000,
-            10: 499000
-        }
-
     def run(self):
         # Start timer
-        self.start_time = time.time()
+        start = time.time()
 
         # Build indices and prepare for processing
-        self.flac_files = index_files(self.flac_dir, extension='flac', logger=self.logger)
-        self.ogg_files = index_files(self.ogg_dir, extension='ogg', logger=self.logger)
+        self.flac_files = index_files(
+            self.flac_dir, extension="flac", logger=self.logger
+        )
+        self.ogg_files = index_files(self.ogg_dir, extension="ogg", logger=self.logger)
 
         parallel_map(
             func=self._build_ogg_metadata_index,
@@ -78,7 +132,7 @@ class Ogger:
             stop_flag=self.stop_flag,
             logger=self.logger,
             description="Fingerprinting",
-            unit="files"
+            unit="files",
         )
 
         # Initialise set for unmatched ogg files
@@ -90,8 +144,8 @@ class Ogger:
             max_workers=self.max_workers,
             stop_flag=self.stop_flag,
             logger=self.logger,
-            description="Syncing",
-            unit="files"
+            description=dry_run_message(self.dry_run, "Syncing"),
+            unit="files",
         )
 
         # Clean up unmatched OGG files and empty directories
@@ -113,7 +167,7 @@ class Ogger:
                 name="Ogger",
                 summary_items=summary_items,
                 dry_run=self.dry_run,
-                elapsed=time.time() - self.start_time
+                elapsed=time.time() - start,
             )
         )
 
@@ -145,27 +199,32 @@ class Ogger:
             # Add both the fingerprint and track_id to the index
             with self.lock:
                 self.ogg_metadata_index[file] = (fingerprint, track_id)
-            
-        except Exception as e:
+
+        except Exception:
             if not self.dry_run:
                 try:
                     file.unlink()
                 except Exception as delete_error:
-                    self.logger.error(f"Failed to delete corrupt file {file}: {delete_error}")
+                    self.logger.error(
+                        f"Failed to delete corrupt file {file}: {delete_error}"
+                    )
             with self.lock:
                 self.ogg_files.remove(file)
 
     def _generate_fingerprint(self, tags: dict) -> str:
         # Filter tags to only include those explicitly set in fields_to_preserve
-        filtered_tags = {k: v for k, v in tags.items() if k.upper() in self.fields_to_preserve}
+        filtered_tags = {
+            k: v for k, v in tags.items() if k.upper() in self.fields_to_preserve
+        }
 
         # Sort keys case-insensitively (but keep original casing)
-        metadata_str = ''.join(
-            f"{k}:{';'.join(v)}" for k, v in sorted(filtered_tags.items(), key=lambda item: item[0].upper())
+        metadata_str = "".join(
+            f"{k}:{';'.join(v)}"
+            for k, v in sorted(filtered_tags.items(), key=lambda item: item[0].upper())
         )
 
         # Return a hash of the metadata string (MD5 hash)
-        return hashlib.md5(metadata_str.encode('utf-8')).hexdigest()
+        return hashlib.md5(metadata_str.encode("utf-8")).hexdigest()
 
     def _match_files(self, flac_file: Path) -> Path | None:
         flac_audio = FLAC(flac_file)
@@ -190,9 +249,9 @@ class Ogger:
 
         # Fallback: try matching by filename if enabled
         if self.filename_match:
-            flac_rel = flac_file.relative_to(self.flac_dir).with_suffix('')
+            flac_rel = flac_file.relative_to(self.flac_dir).with_suffix("")
             for ogg_file in list(self._unmatched_ogg_files):
-                ogg_rel = ogg_file.relative_to(self.ogg_dir).with_suffix('')
+                ogg_rel = ogg_file.relative_to(self.ogg_dir).with_suffix("")
                 if flac_rel == ogg_rel:
                     return self._confirm_match(ogg_file)
 
@@ -230,9 +289,10 @@ class Ogger:
             with self.lock:
                 self._ogg_files_modified.append(ogg_file)
 
-
         # Check if filenames (relative paths) mismatch
-        expected_ogg_relative_path = flac_file.relative_to(self.flac_dir).with_suffix(".ogg")
+        expected_ogg_relative_path = flac_file.relative_to(self.flac_dir).with_suffix(
+            ".ogg"
+        )
         actual_ogg_relative_path = ogg_file.relative_to(self.ogg_dir)
 
         if expected_ogg_relative_path != actual_ogg_relative_path:
@@ -250,7 +310,7 @@ class Ogger:
         verified = True
         try:
             ogg_audio = OggVorbis(ogg_file)
-            if ogg_audio.info.bitrate != self.BITRATE_QUALITY_MAP[self.quality]:
+            if ogg_audio.info.bitrate != self._BITRATE_QUALITY_MAP[self.quality]:
                 verified = False
             if ogg_audio.info.sample_rate != self.sample_rate:
                 verified = False
@@ -262,19 +322,31 @@ class Ogger:
             return False
 
     def _convert_file(self, flac_file: Path):
-        ogg_file = self.ogg_dir / flac_file.relative_to(self.flac_dir).with_suffix('.ogg')
+        ogg_file = self.ogg_dir / flac_file.relative_to(self.flac_dir).with_suffix(
+            ".ogg"
+        )
         if not self.dry_run:
             ogg_file.parent.mkdir(parents=True, exist_ok=True)
             command = [
-                "ffmpeg", "-y", "-loglevel", "error",
-                "-i", str(flac_file),
-                "-map", "0:a",
-                "-map_metadata", "-1",
-                "-c:a", "libvorbis",
-                "-q:a", str(self.quality),
-                "-ar", str(self.sample_rate),
-                "-ac", str(self.channels),
-                str(ogg_file)
+                "ffmpeg",
+                "-y",
+                "-loglevel",
+                "error",
+                "-i",
+                str(flac_file),
+                "-map",
+                "0:a",
+                "-map_metadata",
+                "-1",
+                "-c:a",
+                "libvorbis",
+                "-q:a",
+                str(self.quality),
+                "-ar",
+                str(self.sample_rate),
+                "-ac",
+                str(self.channels),
+                str(ogg_file),
             ]
             try:
                 subprocess.run(command, check=True)
@@ -295,7 +367,9 @@ class Ogger:
                     ogg_audio.save()
 
                 except Exception as meta_error:
-                    self.logger.error(f"Failed to write metadata for {ogg_file}: {meta_error}")
+                    self.logger.error(
+                        f"Failed to write metadata for {ogg_file}: {meta_error}"
+                    )
 
             except subprocess.CalledProcessError as e:
                 self.logger.error(f"ffmpeg failed for {flac_file}: {e}")
@@ -312,7 +386,7 @@ class Ogger:
             self._ogg_files_deleted.append(ogg_file)
 
         # Traverse the directory tree bottom-up
-        for dir_path in sorted(self.ogg_dir.rglob('*'), key=lambda p: -len(p.parts)):
+        for dir_path in sorted(self.ogg_dir.rglob("*"), key=lambda p: -len(p.parts)):
             if check_stop(self.stop_flag, self.logger):
                 break
             if dir_path.is_dir() and not any(dir_path.iterdir()):

@@ -1,27 +1,54 @@
-from utils import *
-import time
-from mutagen.flac import FLAC
-from pathlib import Path
 import subprocess
 import threading
+import time
+from pathlib import Path
+import logging
+
+from mutagen.flac import FLAC
+
+from utils import (
+    get_config,
+    index_files,
+    parallel_map,
+    summary_message,
+    dry_run_message,
+)
+
 
 class ReCoder:
-    """
-    Re-encodes FLAC files to another compression level.
-    """
+    """Re-encodes FLAC files to another compression level."""
 
     def __init__(self, **config):
         # Setup technical stuff
-        self.logger = get_config(config, "logger", expected_type=logging.Logger, optional=True, default=None)
-        self.max_workers = get_config(config, "max_workers", expected_type=int, optional=True, default=4)
-        self.stop_flag = get_config(config, "stop_flag", expected_type=Event, optional=True, default=None)
+        self.logger = get_config(
+            config, "logger", expected_type=logging.Logger, optional=True, default=None
+        )
+        self.max_workers = get_config(
+            config, "max_workers", expected_type=int, optional=True, default=4
+        )
+        self.stop_flag = get_config(
+            config,
+            "stop_flag",
+            expected_type=threading.Event,
+            optional=True,
+            default=None,
+        )
         self.lock = threading.Lock()
 
         # Load configuration
-        self.dry_run = get_config(config, "dry_run", expected_type=bool, optional=True, default=True)
-        self.main_dir = Path(get_config(config, "main_dir", expected_type=str, optional=False))
+        self.dry_run = get_config(
+            config, "dry_run", expected_type=bool, optional=True, default=True
+        )
+        self.main_dir = Path(
+            get_config(config, "main_dir", expected_type=str, optional=False)
+        )
         self.level = get_config(config, "level", expected_type=int, optional=False)
-        self.stamp = get_config(config, "stamp", expected_type=str, optional=True, default=None).upper() or None
+        self.stamp = (
+            get_config(
+                config, "stamp", expected_type=str, optional=True, default=None
+            ).upper()
+            or None
+        )
 
         # Initialise index
         self.files = []
@@ -33,15 +60,15 @@ class ReCoder:
 
     def run(self):
         # Start timer
-        self.start_time = time.time()
+        start = time.time()
 
         # Build index
-        self.files = index_files(self.main_dir, extension='flac', logger=self.logger)
+        self.files = index_files(self.main_dir, extension="flac", logger=self.logger)
 
         if not self.files:
             self.logger.info("No FLAC files found to process.")
             return
-        
+
         # Process FLAC files in parallel
         parallel_map(
             func=self._process_file,
@@ -49,14 +76,14 @@ class ReCoder:
             max_workers=self.max_workers,
             stop_flag=self.stop_flag,
             logger=self.logger,
-            description="Re-coding",
-            unit="files"
+            description=dry_run_message(self.dry_run, "Re-coding"),
+            unit="files",
         )
 
         # Final summary
         summary_items = [
             (self._files_processed, "Processed {} FLAC files."),
-            (self._files_encoded, "Re-encoded {} FLAC files.")
+            (self._files_encoded, "Re-encoded {} FLAC files."),
         ]
 
         self.logger.info(
@@ -64,7 +91,7 @@ class ReCoder:
                 name="ReCoder",
                 summary_items=summary_items,
                 dry_run=self.dry_run,
-                elapsed=time.time() - self.start_time
+                elapsed=time.time() - start,
             )
         )
 
@@ -98,20 +125,36 @@ class ReCoder:
             return True
 
     def _encode(self, file: Path, audio: FLAC):
-        temp_wav = file.with_suffix('.wav')
-        output_file = file.with_suffix('.flac.temp')
-        backup_file = file.with_suffix('.flac.bak')
+        temp_wav = file.with_suffix(".wav")
+        output_file = file.with_suffix(".flac.temp")
+        backup_file = file.with_suffix(".flac.bak")
 
         try:
             # Backup the original file before modifying
             file.replace(backup_file)
 
             # Decode FLAC to WAV
-            decode_cmd = ['flac', '-d', '-f', str(backup_file), '-o', str(temp_wav), '-s']
+            decode_cmd = [
+                "flac",
+                "-d",
+                "-f",
+                str(backup_file),
+                "-o",
+                str(temp_wav),
+                "-s",
+            ]
             subprocess.run(decode_cmd, check=True)
 
             # Re-encode WAV to FLAC
-            encode_cmd = ['flac', f'-{self.level}', '-f', str(temp_wav), '-o', str(output_file), '-s']
+            encode_cmd = [
+                "flac",
+                f"-{self.level}",
+                "-f",
+                str(temp_wav),
+                "-o",
+                str(output_file),
+                "-s",
+            ]
             subprocess.run(encode_cmd, check=True)
 
             # Copy metadata from original audio
@@ -141,7 +184,6 @@ class ReCoder:
         except Exception as e:
             self.logger.error(f"Encoding failed for {file.name}: {e}")
             self._rollback(file, backup_file)
-            self._files_failed.append[file]
         finally:
             if temp_wav.exists():
                 try:
