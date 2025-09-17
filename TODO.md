@@ -20,10 +20,6 @@
 
 - Add support for cover art
 
-## Boxxxer
-
-- Add option to start counting measures at cue point or first hotcue
-
 ## ReGainer
 
 - Implement ReGainer as wrapper for rsgain

@@ -182,8 +182,9 @@ Stamper:
 Boxxxer:
   mixxx_db: mixxxdb.sqlite
   output: rekordbox.xml
-  hot_to_memory: True
   playlist_dir: m3u8
+  first_cue_beat: true
+  hot_to_memory: True
 
 Lister:
   filename: album

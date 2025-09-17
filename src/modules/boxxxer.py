@@ -132,6 +132,9 @@ class Boxxxer:
         self.hot_to_memory = get_config(
             config, "hot_to_memory", expected_type=bool, optional=True, default=False
         )
+        self.first_cue_beat = get_config(
+            config, "first_cue_beat", expected_type=bool, optional=True, default=False
+        )
         playlist_dir_str = get_config(
             config, "playlist_dir", expected_type=str, optional=True, default=None
         )
@@ -255,20 +258,60 @@ class Boxxxer:
                     # Fallback if there's only one beat
                     bpm_values = [str(round(track["bpm"], 2))]
 
-                # Step 5: Add TEMPO elements to XML
-                last_bpm = None
-                for i, beat in enumerate(beats):
-                    current_bpm = bpm_values[i]
-                    if current_bpm != last_bpm:
-                        ET.SubElement(
-                            track_element,
-                            "TEMPO",
-                            Inizio=str(beat),
-                            Bpm=str(current_bpm),
-                            Metro="4/4",
-                            Battito=str((i % 4) + 1),
-                        )
-                        last_bpm = current_bpm
+                if self.first_cue_beat:
+                    # Determine the first occurring cue point, if any
+                    first_cue = None
+                    if "cues" in track and isinstance(track["cues"], list):
+                        cue_positions = [
+                            cue.get("position")
+                            for cue in track["cues"]
+                            if cue.get("position") is not None
+                        ]
+                        if cue_positions:
+                            first_cue = min(cue_positions)
+
+                    # Determine the index of the beat nearest to the first cue
+                    if len(beats) > 1:
+                        if first_cue is not None:
+                            nearest_beat_index = min(
+                                range(len(beats)),
+                                key=lambda i: abs(beats[i] - first_cue),
+                            )
+                        else:
+                            nearest_beat_index = 0
+                    else:
+                        # Only one beat, use virtual beat spacing
+                        if first_cue is not None and track.get("bpm"):
+                            beat_interval = 60.0 / track["bpm"]
+                            virtual_index = round(
+                                (first_cue - beats[0]) / beat_interval
+                            )
+                            nearest_beat_index = (
+                                virtual_index if virtual_index >= 0 else 0
+                            )
+                        else:
+                            nearest_beat_index = 0
+                else:
+                    nearest_beat_index = 0
+
+            # Add TEMPO elements with shifted battito
+            last_bpm = None
+            for i, beat in enumerate(beats):
+                current_bpm = bpm_values[i]
+                if current_bpm != last_bpm:
+                    # Shift battito so the beat nearest to cue becomes 1
+                    shifted_index = (i - nearest_beat_index) % 4
+                    battito = shifted_index + 1
+
+                    ET.SubElement(
+                        track_element,
+                        "TEMPO",
+                        Inizio=str(beat),
+                        Bpm=str(current_bpm),
+                        Metro="4/4",
+                        Battito=str(battito),
+                    )
+                    last_bpm = current_bpm
 
             # CUES
             if track.get("cues", None):
@@ -493,6 +536,16 @@ class Boxxxer:
         if not track["genre"]:
             track["genre"] = ""
 
+        # Fix cue times
+        if track.get("cues"):
+            for cue in track["cues"]:
+                cue["position"] = self.adjust_cue_time(
+                    cue["position"], track["channels"], track["samplerate"]
+                )
+                cue["length"] = self.adjust_cue_time(
+                    cue["length"], track["channels"], track["samplerate"]
+                )
+
         # Map colour
         if track.get("color"):
             track["grouping"] = self.classify_rgb(*self.decimal_to_rgb(track["color"]))[
@@ -510,7 +563,7 @@ class Boxxxer:
         track["mix"] = ""
 
     def adjust_cue_time(self, samples, channels, samplerate):
-        return f"{samples / channels / samplerate:.3f}"
+        return round(samples / channels / samplerate, 3)
 
     def adjust_beat_time(self, frame_position, samplerate, bpm):
         position_seconds = frame_position / samplerate
@@ -520,7 +573,7 @@ class Boxxxer:
                 position_seconds += beat_length
             elif position_seconds > beat_length:
                 position_seconds -= beat_length
-        return f"{position_seconds:.3f}"
+        return round(position_seconds, 3)
 
     def decimal_to_rgb(self, decimal):
         r = (decimal >> 16) & 0xFF
