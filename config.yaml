@@ -185,6 +185,7 @@ Boxxxer:
   playlist_dir: m3u8
   first_cue_beat: true
   hot_to_memory: True
+  bpm_tolerance: 0.1
 
 Lister:
   filename: album

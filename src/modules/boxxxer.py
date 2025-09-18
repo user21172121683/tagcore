@@ -135,6 +135,9 @@ class Boxxxer:
         self.first_cue_beat = get_config(
             config, "first_cue_beat", expected_type=bool, optional=True, default=False
         )
+        self.bpm_tolerance = get_config(
+            config, "bpm_tolerance", expected_type=float, optional=True, default=0
+        )
         playlist_dir_str = get_config(
             config, "playlist_dir", expected_type=str, optional=True, default=None
         )
@@ -298,7 +301,7 @@ class Boxxxer:
             last_bpm = None
             for i, beat in enumerate(beats):
                 current_bpm = bpm_values[i]
-                if current_bpm != last_bpm:
+                if last_bpm is None or abs(current_bpm - last_bpm) > self.bpm_tolerance:
                     # Shift battito so the beat nearest to cue becomes 1
                     shifted_index = (i - nearest_beat_index) % 4
                     battito = shifted_index + 1
