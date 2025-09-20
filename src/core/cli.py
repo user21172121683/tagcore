@@ -100,8 +100,12 @@ class App:
                         continue
 
                     if callable(getattr(obj, "run", None)):
-                        # Only include classes defined in this module, not imported ones
+                        # Only include classes defined in this module
                         if obj.__module__ != module_name:
+                            continue
+
+                        # Skip classes explicitly marked as placeholders
+                        if getattr(obj, "placeholder", False):
                             continue
 
                         scripts[obj.__name__] = {
