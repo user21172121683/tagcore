@@ -1,7 +1,6 @@
 General:
   dry_run: false
   main_dir: flac
-  username: user21172121683
   max_workers: 8
   console_level: DEBUG
   file_level: DEBUG
@@ -38,6 +37,9 @@ Rymporter:
     label_id: false
     label_name: false
     label_catalognr: false
+
+Rymfetcher:
+  username: user21172121683
 
 Flagger:
   skip_integrity_check: false
@@ -96,6 +98,7 @@ Ogger:
     - LYRICS
 
 ReBrainer:
+  username: user21172121683
   field_map:
     ALBUM: release.release-group.title
     ALBUMARTIST: release.release-group.artist-credit.artist.name
