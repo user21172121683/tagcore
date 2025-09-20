@@ -2,19 +2,17 @@ import logging
 import shutil
 import sys
 from concurrent.futures import Executor, ThreadPoolExecutor, as_completed
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from threading import Event
-from typing import *
+from typing import Any, Optional, Callable, Type, get_origin, get_args
+
 
 from tqdm import tqdm
 
-# Constants
-DATA_DIR = Path(__file__).resolve().parents[1] / "data"
-LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
+from constants.globals import LOG_DIR
 
 
-# Utility functions
 def index_files(directory: Path, extension: str, logger: logging.Logger) -> list[Path]:
     logger.info(f"Indexing {extension.upper()} files in {directory.resolve()}...")
     try:
@@ -112,7 +110,7 @@ def setup_logger(
 
 def parallel_map(
     func: Callable,
-    items_with_args: List[Any],
+    items_with_args: list[Any],
     *,
     executor_type: Type[Executor] = ThreadPoolExecutor,
     max_workers: int = 4,
@@ -120,7 +118,7 @@ def parallel_map(
     stop_flag: Optional[Any] = None,
     description: Optional[str] = "Processing",
     unit: str = "items",
-) -> List[Any]:
+) -> list[Any]:
     """Applies `func` to each item in `items_with_args` in parallel.
 
     Each item should be either:
@@ -195,7 +193,7 @@ def parallel_map(
 
 
 def get_config(
-    config: Dict[str, Any],
+    config: dict[str, Any],
     key: str,
     *,
     expected_type: Type,
@@ -274,40 +272,6 @@ class UpperFLAC:
 
     def __getattr__(self, attr):
         return getattr(self._flac, attr)
-
-
-def summary_message(
-    name: str,
-    summary_items: list[tuple[list, str]],
-    dry_run: bool,
-    elapsed: float | None = None,
-) -> str:
-    # Initialise with banner
-    message = banner_message(f"{dry_run_message(dry_run, name)} summary")
-
-    # Table to summarise
-    if not any(items for items, _ in summary_items):
-        message += "\nNothing done!"
-    else:
-        for items, msg_template in summary_items:
-            if items:
-                message += "\n" + msg_template.format(len(items))
-
-    # Total time elapsed
-    if elapsed:
-        message += f"\nTotal time elapsed: {str(timedelta(seconds=elapsed))[:-3]}"
-
-    # Returning to main
-    message += banner_message("Returning...")
-    return message
-
-
-def dry_run_message(dry_run: bool, message: str) -> str:
-    return f"[DRY RUN] {message}" if dry_run else message
-
-
-def banner_message(message: str, symbol: str = "-", length: int = 100):
-    return f"\n{symbol*length}\n{message}\n{symbol*length}"
 
 
 def check_stop(stop_flag: Event, logger=None) -> bool:

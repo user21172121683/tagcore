@@ -1,47 +1,19 @@
 import subprocess
-import threading
-import time
 from pathlib import Path
-import logging
 
 from mutagen.flac import FLAC
 
-from utils import (
-    get_config,
-    index_files,
-    parallel_map,
-    summary_message,
-    dry_run_message,
-)
+from core.base import BaseProcessor
+from utils.helpers import get_config, UpperFLAC
 
 
-class ReCoder:
+class ReCoder(BaseProcessor):
     """Re-encodes FLAC files to another compression level."""
 
     def __init__(self, **config):
-        # Setup technical stuff
-        self.logger = get_config(
-            config, "logger", expected_type=logging.Logger, optional=True, default=None
-        )
-        self.max_workers = get_config(
-            config, "max_workers", expected_type=int, optional=True, default=4
-        )
-        self.stop_flag = get_config(
-            config,
-            "stop_flag",
-            expected_type=threading.Event,
-            optional=True,
-            default=None,
-        )
-        self.lock = threading.Lock()
+        super().__init__(**config)
 
-        # Load configuration
-        self.dry_run = get_config(
-            config, "dry_run", expected_type=bool, optional=True, default=True
-        )
-        self.main_dir = Path(
-            get_config(config, "main_dir", expected_type=str, optional=False)
-        )
+        # Additional configuration
         self.level = get_config(config, "level", expected_type=int, optional=False)
         self.stamp = (
             get_config(
@@ -50,56 +22,14 @@ class ReCoder:
             or None
         )
 
-        # Initialise index
-        self.files = []
+    def pre_process(self):
+        self.logger.info("Re-encoding FLAC files...")
 
-        # Stats
-        self._files_processed = []
-        self._files_encoded = []
-        self._files_failed = []
-
-    def run(self):
-        # Start timer
-        start = time.time()
-
-        # Build index
-        self.files = index_files(self.main_dir, extension="flac", logger=self.logger)
-
-        if not self.files:
-            self.logger.info("No FLAC files found to process.")
-            return
-
-        # Process FLAC files in parallel
-        parallel_map(
-            func=self._process_file,
-            items_with_args=self.files,
-            max_workers=self.max_workers,
-            stop_flag=self.stop_flag,
-            logger=self.logger,
-            description=dry_run_message(self.dry_run, "Re-coding"),
-            unit="files",
-        )
-
-        # Final summary
-        summary_items = [
-            (self._files_processed, "Processed {} FLAC files."),
-            (self._files_encoded, "Re-encoded {} FLAC files."),
-        ]
-
-        self.logger.info(
-            summary_message(
-                name="ReCoder",
-                summary_items=summary_items,
-                dry_run=self.dry_run,
-                elapsed=time.time() - start,
-            )
-        )
-
-    def _process_file(self, file: Path):
+    def process_file(self, file: Path):
         try:
             with self.lock:
-                self._files_processed.append(file)
-            audio = FLAC(file)
+                self.stats.processed.append(file)
+            audio = UpperFLAC(FLAC(file))
             if self._check_necessity(audio):
                 if not self.dry_run:
                     self._encode(file, audio)
@@ -158,7 +88,7 @@ class ReCoder:
             subprocess.run(encode_cmd, check=True)
 
             # Copy metadata from original audio
-            reencoded_audio = FLAC(output_file)
+            reencoded_audio = UpperFLAC(FLAC(output_file))
             reencoded_audio.clear()
             for key in audio.keys():
                 reencoded_audio[key] = audio[key]
@@ -175,15 +105,16 @@ class ReCoder:
             output_file.replace(file)
 
             with self.lock:
-                self._files_encoded.append(file)
+                self.stats.modified.append(file)
 
             # Cleanup backup after success
             if backup_file.exists():
                 backup_file.unlink()
 
         except Exception as e:
-            self.logger.error(f"Encoding failed for {file.name}: {e}")
+            self.logger.exception(f"Encoding failed for {file.name}: {e}")
             self._rollback(file, backup_file)
+            self.stats.failed.append(file)
         finally:
             if temp_wav.exists():
                 try:

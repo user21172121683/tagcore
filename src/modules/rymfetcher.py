@@ -1,5 +1,5 @@
 import webbrowser
-from utils import banner_message
+from utils.formatting import banner_message
 
 
 class Rymfetcher:
